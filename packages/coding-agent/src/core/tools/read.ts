@@ -8,7 +8,7 @@ import { formatDimensionNote, resizeImage } from "../../utils/image-resize.js";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import { resolveReadPath } from "./path-utils.js";
-import { invalidArgText, shortenPath, str } from "./render-utils.js";
+import { invalidArgText, shortenPath, statusDot, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "./truncate.js";
 
@@ -64,13 +64,13 @@ function getReadPathDisplay(
 	const rawPath = str(args?.file_path ?? args?.path);
 	const path = rawPath !== null ? shortenPath(rawPath) : null;
 	const invalidArg = invalidArgText(theme);
-	let pathDisplay = path === null ? invalidArg : path ? theme.fg("accent", path) : theme.fg("toolOutput", "...");
+	let pathDisplay = path === null ? invalidArg : path ? theme.fg("muted", path) : theme.fg("dim", "...");
 	const offset = args?.offset;
 	const limit = args?.limit;
 	if (offset !== undefined || limit !== undefined) {
 		const startLine = offset ?? 1;
 		const endLine = limit !== undefined ? startLine + limit - 1 : "";
-		pathDisplay += theme.fg("warning", `:${startLine}${endLine ? `-${endLine}` : ""}`);
+		pathDisplay += theme.fg("dim", `:${startLine}${endLine ? `-${endLine}` : ""}`);
 	}
 	return pathDisplay;
 }
@@ -80,12 +80,8 @@ function formatReadCall(
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
 	context?: { isPartial?: boolean; isError?: boolean },
 ): string {
-	const status = context?.isPartial
-		? theme.fg("muted", " reading…")
-		: context?.isError
-			? theme.fg("muted", " failed")
-			: "";
-	return `${theme.fg("toolTitle", theme.bold("read"))} ${getReadPathDisplay(args, theme)}${status}`;
+	const dot = statusDot(theme, context?.isError ? "error" : context?.isPartial ? "pending" : "success");
+	return `${dot} ${theme.fg("muted", "read")} ${getReadPathDisplay(args, theme)}`;
 }
 
 function formatReadResult(): string {

@@ -62,3 +62,11 @@ export type ToolRenderResultLike<TDetails> = {
 export function invalidArgText(theme: { fg: (name: any, text: string) => string }): string {
 	return theme.fg("error", "[invalid arg]");
 }
+
+export function statusDot(
+	theme: { fg: (name: any, text: string) => string },
+	status: "pending" | "error" | "success",
+): string {
+	const color = status === "error" ? "error" : status === "success" ? "success" : "dim";
+	return theme.fg(color, "●");
+}

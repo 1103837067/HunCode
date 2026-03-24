@@ -6,7 +6,7 @@ import nodePath from "path";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
 import { resolveToCwd } from "./path-utils.js";
-import { getTextOutput, invalidArgText, shortenPath, str } from "./render-utils.js";
+import { getTextOutput, invalidArgText, shortenPath, statusDot, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.js";
 
@@ -51,16 +51,13 @@ export interface LsToolOptions {
 function formatLsCall(
 	args: { path?: string; limit?: number } | undefined,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
+	context?: { isPartial?: boolean; isError?: boolean },
 ): string {
 	const rawPath = str(args?.path);
 	const path = rawPath !== null ? shortenPath(rawPath || ".") : null;
-	const limit = args?.limit;
 	const invalidArg = invalidArgText(theme);
-	let text = `${theme.fg("toolTitle", theme.bold("ls"))} ${path === null ? invalidArg : theme.fg("accent", path)}`;
-	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
-	}
-	return text;
+	const dot = statusDot(theme, context?.isError ? "error" : context?.isPartial ? "pending" : "success");
+	return `${dot} ${theme.fg("muted", "ls")} ${path === null ? invalidArg : theme.fg("muted", path)}`;
 }
 
 function formatLsResult(
@@ -213,7 +210,7 @@ export function createLsToolDefinition(
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatLsCall(args, theme));
+			text.setText(formatLsCall(args, theme, { isPartial: context.isPartial, isError: context.isError }));
 			return text;
 		},
 		renderResult(result, options, theme, context) {

@@ -8,7 +8,7 @@ import path from "path";
 import { ensureTool } from "../../utils/tools-manager.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import { resolveToCwd } from "./path-utils.js";
-import { invalidArgText, shortenPath, str } from "./render-utils.js";
+import { invalidArgText, statusDot, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import {
 	DEFAULT_MAX_BYTES,
@@ -66,21 +66,12 @@ export interface GrepToolOptions {
 function formatGrepCall(
 	args: { pattern: string; path?: string; glob?: string; limit?: number } | undefined,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
+	context?: { isPartial?: boolean; isError?: boolean },
 ): string {
 	const pattern = str(args?.pattern);
-	const rawPath = str(args?.path);
-	const path = rawPath !== null ? shortenPath(rawPath || ".") : null;
-	const glob = str(args?.glob);
-	const limit = args?.limit;
 	const invalidArg = invalidArgText(theme);
-	let text =
-		theme.fg("toolTitle", theme.bold("grep")) +
-		" " +
-		(pattern === null ? invalidArg : theme.fg("accent", `/${pattern || ""}/`)) +
-		theme.fg("toolOutput", ` in ${path === null ? invalidArg : path}`);
-	if (glob) text += theme.fg("toolOutput", ` (${glob})`);
-	if (limit !== undefined) text += theme.fg("toolOutput", ` limit ${limit}`);
-	return text;
+	const dot = statusDot(theme, context?.isError ? "error" : context?.isPartial ? "pending" : "success");
+	return `${dot} ${theme.fg("muted", "grep")} ${pattern === null ? invalidArg : theme.fg("muted", `/${pattern || ""}/`)}`;
 }
 
 function formatGrepResult(): string {
@@ -323,7 +314,7 @@ export function createGrepToolDefinition(
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatGrepCall(args, theme));
+			text.setText(formatGrepCall(args, theme, { isPartial: context.isPartial, isError: context.isError }));
 			return text;
 		},
 		renderResult(_result, _options, _theme, context) {

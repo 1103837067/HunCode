@@ -2139,6 +2139,11 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/lsp") {
+				this.handleLspCommand();
+				this.editor.setText("");
+				return;
+			}
 			if (text === "/quit") {
 				this.editor.setText("");
 				await this.shutdown();
@@ -4229,6 +4234,23 @@ export class InteractiveMode {
 			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}`;
 		}
 
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(info, 1, 0));
+		this.ui.requestRender();
+	}
+
+	private handleLspCommand(): void {
+		const status = this.session.getLspStatus();
+		let info = `${theme.bold("LSP Servers")}\n\n`;
+		if (status.servers.length === 0) {
+			info += theme.fg("dim", "No LSP servers active. Servers start on first file edit/lint check.");
+		} else {
+			for (const server of status.servers) {
+				const stateColor = server.state === "ready" ? "success" : server.state === "starting" ? "warning" : "error";
+				const dot = theme.fg(stateColor, "●");
+				info += `${dot} ${theme.fg("muted", server.id)} ${theme.fg("dim", server.root)} ${theme.fg(stateColor, server.state)}\n`;
+			}
+		}
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();

@@ -3,12 +3,11 @@ import { Text } from "@mariozechner/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
-import { globSync } from "glob";
 import path from "path";
 import { ensureTool } from "../../utils/tools-manager.js";
 import type { ToolDefinition } from "../extensions/types.js";
 import { resolveToCwd } from "./path-utils.js";
-import { invalidArgText, shortenPath, str } from "./render-utils.js";
+import { invalidArgText, statusDot, str } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.js";
 
@@ -58,21 +57,12 @@ export interface FindToolOptions {
 function formatFindCall(
 	args: { pattern: string; path?: string; limit?: number } | undefined,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
+	context?: { isPartial?: boolean; isError?: boolean },
 ): string {
 	const pattern = str(args?.pattern);
-	const rawPath = str(args?.path);
-	const path = rawPath !== null ? shortenPath(rawPath || ".") : null;
-	const limit = args?.limit;
 	const invalidArg = invalidArgText(theme);
-	let text =
-		theme.fg("toolTitle", theme.bold("find")) +
-		" " +
-		(pattern === null ? invalidArg : theme.fg("accent", pattern || "")) +
-		theme.fg("toolOutput", ` in ${path === null ? invalidArg : path}`);
-	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
-	}
-	return text;
+	const dot = statusDot(theme, context?.isError ? "error" : context?.isPartial ? "pending" : "success");
+	return `${dot} ${theme.fg("muted", "find")} ${pattern === null ? invalidArg : theme.fg("muted", pattern || "")}`;
 }
 
 function formatFindResult(): string {
@@ -167,31 +157,19 @@ export function createFindToolDefinition(
 							return;
 						}
 
-						// Build fd arguments.
+						// fd natively respects .gitignore in their proper directory scope.
+						// Manual --ignore-file collection is wrong: special .gitignore
+						// files (e.g. containing "*") intended for their own directory
+						// get applied globally and suppress all results.
 						const args: string[] = [
 							"--glob",
 							"--color=never",
 							"--hidden",
 							"--max-results",
 							String(effectiveLimit),
+							pattern,
+							searchPath,
 						];
-						// Include .gitignore files from the search tree.
-						const gitignoreFiles = new Set<string>();
-						const rootGitignore = path.join(searchPath, ".gitignore");
-						if (existsSync(rootGitignore)) gitignoreFiles.add(rootGitignore);
-						try {
-							const nestedGitignores = globSync("**/.gitignore", {
-								cwd: searchPath,
-								dot: true,
-								absolute: true,
-								ignore: ["**/node_modules/**", "**/.git/**"],
-							});
-							for (const file of nestedGitignores) gitignoreFiles.add(file);
-						} catch {
-							// ignore
-						}
-						for (const gitignorePath of gitignoreFiles) args.push("--ignore-file", gitignorePath);
-						args.push(pattern, searchPath);
 
 						const result = spawnSync(fdPath, args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
 						signal?.removeEventListener("abort", onAbort);
@@ -264,7 +242,7 @@ export function createFindToolDefinition(
 		},
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatFindCall(args, theme));
+			text.setText(formatFindCall(args, theme, { isPartial: context.isPartial, isError: context.isError }));
 			return text;
 		},
 		renderResult(_result, _options, _theme, context) {

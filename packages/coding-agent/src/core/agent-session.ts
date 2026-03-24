@@ -145,7 +145,7 @@ export interface AgentSessionConfig {
 	customTools?: ToolDefinition[];
 	/** Model registry for API key resolution and model discovery */
 	modelRegistry: ModelRegistry;
-	/** Initial active built-in tool names. Default: [read, bash, edit, write] */
+	/** Initial active built-in tool names. Default: all built-in tools */
 	initialActiveToolNames?: string[];
 	/**
 	 * Override base tools (useful for custom runtimes).
@@ -820,6 +820,11 @@ export class AgentSession {
 	/** Current session display name, if set */
 	get sessionName(): string | undefined {
 		return this.sessionManager.getSessionName();
+	}
+
+	/** LSP server status */
+	getLspStatus(): { servers: Array<{ id: string; root: string; state: string }> } {
+		return this._lspManager?.getStatus() ?? { servers: [] };
 	}
 
 	/** Scoped models for cycling (from --models flag) */
@@ -2374,7 +2379,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write", "read_lints"];
+			: ["read", "bash", "edit", "write", "grep", "find", "ls", "read_lints"];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,

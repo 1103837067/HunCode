@@ -5,7 +5,7 @@ import { type Static, Type } from "@sinclair/typebox";
 import type { LspManager } from "../../lsp/manager.js";
 import { SEVERITY_LABELS } from "../../lsp/types.js";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.js";
-import { shortenPath } from "./render-utils.js";
+import { shortenPath, statusDot } from "./render-utils.js";
 import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 
 const readLintsSchema = Type.Object({
@@ -22,13 +22,15 @@ export type ReadLintsToolInput = Static<typeof readLintsSchema>;
 function formatReadLintsCall(
 	args: { paths?: string[] } | undefined,
 	theme: typeof import("../../modes/interactive/theme/theme.js").theme,
+	context?: { isPartial?: boolean; isError?: boolean },
 ): string {
+	const dot = statusDot(theme, context?.isError ? "error" : context?.isPartial ? "pending" : "success");
 	const paths = args?.paths;
 	if (!paths || paths.length === 0) {
-		return `${theme.fg("toolTitle", theme.bold("read_lints"))} ${theme.fg("toolOutput", "(all files)")}`;
+		return `${dot} ${theme.fg("muted", "read_lints")} ${theme.fg("dim", "(all files)")}`;
 	}
-	const display = paths.map((p) => theme.fg("accent", shortenPath(p))).join(", ");
-	return `${theme.fg("toolTitle", theme.bold("read_lints"))} ${display}`;
+	const display = paths.map((p) => theme.fg("muted", shortenPath(p))).join(theme.fg("dim", ", "));
+	return `${dot} ${theme.fg("muted", "read_lints")} ${display}`;
 }
 
 function formatReadLintsResult(
@@ -130,7 +132,7 @@ export function createReadLintsToolDefinition(
 
 		renderCall(args, theme, context) {
 			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatReadLintsCall(args, theme));
+			text.setText(formatReadLintsCall(args, theme, { isPartial: context.isPartial, isError: context.isError }));
 			return text;
 		},
 

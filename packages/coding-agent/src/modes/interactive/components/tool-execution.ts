@@ -56,18 +56,15 @@ export class ToolExecutionComponent extends Container {
 		this.ui = ui;
 		this.cwd = cwd;
 
-		if (!this.isCompactReadTool()) {
+		if (!this.isCompactTool()) {
 			this.addChild(new Spacer(1));
 		}
 
-		this.contentBox = new Box(this.isCompactReadTool() ? 0 : 1, this.isCompactReadTool() ? 0 : 1, (text: string) =>
+		this.contentBox = new Box(this.isCompactTool() ? 0 : 1, this.isCompactTool() ? 0 : 1, (text: string) =>
 			this.getBackgroundRenderer()(text),
 		);
-		this.contentText = new Text(
-			"",
-			this.isCompactReadTool() ? 0 : 1,
-			this.isCompactReadTool() ? 0 : 1,
-			(text: string) => this.getBackgroundRenderer()(text),
+		this.contentText = new Text("", this.isCompactTool() ? 0 : 1, this.isCompactTool() ? 0 : 1, (text: string) =>
+			this.getBackgroundRenderer()(text),
 		);
 
 		if (this.hasRendererDefinition()) {
@@ -79,12 +76,14 @@ export class ToolExecutionComponent extends Container {
 		this.updateDisplay();
 	}
 
-	private isCompactReadTool(): boolean {
-		return this.toolName === "read";
+	private static readonly COMPACT_TOOLS = new Set(["read", "grep", "find", "ls", "read_lints"]);
+
+	private isCompactTool(): boolean {
+		return ToolExecutionComponent.COMPACT_TOOLS.has(this.toolName);
 	}
 
 	private getBackgroundRenderer(): (text: string) => string {
-		if (this.isCompactReadTool()) {
+		if (this.isCompactTool()) {
 			return (text: string) => text;
 		}
 		if (this.isPartial) {
@@ -263,7 +262,7 @@ export class ToolExecutionComponent extends Container {
 				}
 			}
 
-			if (this.result) {
+			if (this.result && !this.isCompactTool()) {
 				const resultRenderer = this.getResultRenderer();
 				if (!resultRenderer) {
 					const component = this.createResultFallback();

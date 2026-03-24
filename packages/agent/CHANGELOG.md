@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- XML tool invocation (`toolInvocation: "xml"`): assistant text no longer retains raw Morph-style tool XML after parsing; matched blocks are stripped so UIs render tool cards and prose only, not duplicate tags.
+- XML mode streaming: each `message_start` / `message_update` now runs `augmentAssistantMessageForXmlStreaming` so incomplete tool XML is stripped from assistant text immediately (no raw-tag flash) and synthetic `toolCall` rows use stable ids `xml-synthetic-0`, `xml-synthetic-1`, … matching the final `augmentAssistantMessageWithXmlToolCalls` pass.
+
 ## [0.62.0] - 2026-03-23
 
 ## [0.61.1] - 2026-03-20

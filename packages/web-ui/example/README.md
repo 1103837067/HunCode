@@ -5,13 +5,13 @@ This is a minimal example showing how to use `@mariozechner/pi-web-ui` in a web 
 ## Setup
 
 ```bash
-npm install
+pnpm install
 ```
 
 ## Development
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.

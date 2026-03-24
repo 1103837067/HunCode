@@ -11,6 +11,7 @@ export function wrapToolDefinition<TDetails = unknown>(
 		label: definition.label,
 		description: definition.description,
 		parameters: definition.parameters,
+		xml: definition.xml,
 		execute: (toolCallId, params, signal, onUpdate) =>
 			definition.execute(toolCallId, params, signal, onUpdate, ctxFactory?.() as ExtensionContext),
 	};
@@ -36,6 +37,7 @@ export function createToolDefinitionFromAgentTool(tool: AgentTool<any>): ToolDef
 		label: tool.label,
 		description: tool.description,
 		parameters: tool.parameters as any,
+		xml: tool.xml,
 		execute: async (toolCallId, params, signal, onUpdate) => tool.execute(toolCallId, params, signal, onUpdate),
 	};
 }

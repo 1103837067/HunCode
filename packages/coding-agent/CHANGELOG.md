@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Write tool: while the model streams XML/arguments, `renderCall` shows the **last** ~10 lines of the file (with a muted line range hint), not the top of the file. After execution, `toolResult` is passed into `ToolRenderContext` so the call row drops the streaming preview and only the title remains; `renderResult` shows the unified diff (collapsed to ~22 lines until `app.tools.expand`). `WriteToolResultEvent.details` remains `WriteToolDetails | undefined` (includes `diff`).
+- Default system prompt (`buildSystemPrompt`) is replaced with a Cursor-agent-gist-style body (communication, tool_calling, search_and_reading, making_code_changes, debugging, calling_external_apis) adapted for pi, plus a **Tool reference** section with gist-aligned narratives for each active built-in tool (`read`, `grep`, `find`, `ls`, `bash`, `edit`, `write`). Optional `promptGuidelines` append under `## Additional guidelines`. Unavailable Cursor tools (e.g. semantic codebase search) are omitted and called out in search_and_reading.
+
+### Added
+
+- Monorepo package manager switched to **pnpm** (`pnpm-workspace.yaml`, `packageManager` in root `package.json`, CI and docs updated). Install with `pnpm install`, verify with `pnpm run check`.
+- `ToolDefinition.xml` (Morph-style XML registration: root tag + `parameterTags` map) with `buildXmlToolCallsPromptSection`, `parseXmlToolCallsFromText`, and related helpers. Built-in tools `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls` document Morph-style XML in the system prompt when active. See [Morph XML tool calls](https://docs.morphllm.com/guides/xml-tool-calls).
+
 ### Fixed
 
 - Fixed RPC `get_session_stats` to expose `contextUsage`, so headless clients can read actual current context-window usage instead of deriving it from token totals ([#2550](https://github.com/badlogic/pi-mono/issues/2550))

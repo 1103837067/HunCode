@@ -76,6 +76,7 @@ export {
 	createWriteTool,
 	createWriteToolDefinition,
 	type WriteOperations,
+	type WriteToolDetails,
 	type WriteToolInput,
 	type WriteToolOptions,
 	writeTool,

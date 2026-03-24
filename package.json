@@ -2,31 +2,23 @@
 	"name": "pi-monorepo",
 	"private": true,
 	"type": "module",
-	"workspaces": [
-		"packages/*",
-		"packages/web-ui/example",
-		"packages/coding-agent/examples/extensions/with-deps",
-		"packages/coding-agent/examples/extensions/custom-provider-anthropic",
-		"packages/coding-agent/examples/extensions/custom-provider-gitlab-duo",
-		"packages/coding-agent/examples/extensions/custom-provider-qwen-cli"
-	],
+	"packageManager": "pnpm@9.15.9",
 	"scripts": {
-		"clean": "npm run clean --workspaces",
-		"build": "cd packages/tui && npm run build && cd ../ai && npm run build && cd ../agent && npm run build && cd ../coding-agent && npm run build && cd ../mom && npm run build && cd ../web-ui && npm run build && cd ../pods && npm run build",
-		"dev": "concurrently --names \"ai,agent,coding-agent,mom,web-ui,tui\" --prefix-colors \"cyan,yellow,red,white,green,magenta\" \"cd packages/ai && npm run dev\" \"cd packages/agent && npm run dev\" \"cd packages/coding-agent && npm run dev\" \"cd packages/mom && npm run dev\" \"cd packages/web-ui && npm run dev\" \"cd packages/tui && npm run dev\"",
-		"dev:tsc": "concurrently --names \"ai,web-ui\" --prefix-colors \"cyan,green\" \"cd packages/ai && npm run dev:tsc\" \"cd packages/web-ui && npm run dev:tsc\"",
-		"check": "biome check --write --error-on-warnings . && tsgo --noEmit && npm run check:browser-smoke && cd packages/web-ui && npm run check",
+		"clean": "pnpm -r run clean",
+		"build": "pnpm --filter @mariozechner/pi-tui run build && pnpm --filter @mariozechner/pi-ai run build && pnpm --filter @mariozechner/pi-agent-core run build && pnpm --filter @mariozechner/pi-coding-agent run build && pnpm --filter @mariozechner/pi-mom run build && pnpm --filter @mariozechner/pi-web-ui run build && pnpm --filter @mariozechner/pi run build",
+		"dev": "concurrently --names \"ai,agent,coding-agent,mom,web-ui,tui\" --prefix-colors \"cyan,yellow,red,white,green,magenta\" \"pnpm --filter @mariozechner/pi-ai run dev\" \"pnpm --filter @mariozechner/pi-agent-core run dev\" \"pnpm --filter @mariozechner/pi-coding-agent run dev\" \"pnpm --filter @mariozechner/pi-mom run dev\" \"pnpm --filter @mariozechner/pi-web-ui run dev\" \"pnpm --filter @mariozechner/pi-tui run dev\"",
+		"dev:tsc": "concurrently --names \"ai,web-ui\" --prefix-colors \"cyan,green\" \"pnpm --filter @mariozechner/pi-ai run dev:tsc\" \"pnpm --filter @mariozechner/pi-web-ui run dev:tsc\"",
+		"check": "biome check --write --error-on-warnings . && tsgo --noEmit && pnpm run check:browser-smoke && pnpm --filter @mariozechner/pi-web-ui run check",
 		"check:browser-smoke": "node scripts/check-browser-smoke.mjs",
 		"profile:tui": "node scripts/profile-coding-agent-node.mjs --mode tui",
 		"profile:rpc": "node scripts/profile-coding-agent-node.mjs --mode rpc",
-		"test": "npm run test --workspaces --if-present",
-		"version:patch": "npm version patch -ws --no-git-tag-version && node scripts/sync-versions.js && shx rm -rf node_modules packages/*/node_modules package-lock.json && npm install",
-		"version:minor": "npm version minor -ws --no-git-tag-version && node scripts/sync-versions.js && shx rm -rf node_modules packages/*/node_modules package-lock.json && npm install",
-		"version:major": "npm version major -ws --no-git-tag-version && node scripts/sync-versions.js && shx rm -rf node_modules packages/*/node_modules package-lock.json && npm install",
-		"version:set": "npm version -ws",
-		"prepublishOnly": "npm run clean && npm run build && npm run check",
-		"publish": "npm run prepublishOnly && npm publish -ws --access public",
-		"publish:dry": "npm run prepublishOnly && npm publish -ws --access public --dry-run",
+		"test": "pnpm --filter @mariozechner/pi-ai --filter @mariozechner/pi-agent-core --filter @mariozechner/pi-tui --filter @mariozechner/pi-coding-agent run test",
+		"version:patch": "pnpm --filter \"@mariozechner/*\" exec -- npm version patch --no-git-tag-version && node scripts/sync-versions.js && pnpm install",
+		"version:minor": "pnpm --filter \"@mariozechner/*\" exec -- npm version minor --no-git-tag-version && node scripts/sync-versions.js && pnpm install",
+		"version:major": "pnpm --filter \"@mariozechner/*\" exec -- npm version major --no-git-tag-version && node scripts/sync-versions.js && pnpm install",
+		"prepublishOnly": "pnpm run clean && pnpm run build && pnpm run check",
+		"publish": "pnpm run prepublishOnly && pnpm publish -r --access public",
+		"publish:dry": "pnpm run prepublishOnly && pnpm publish -r --access public --dry-run",
 		"release:patch": "node scripts/release.mjs patch",
 		"release:minor": "node scripts/release.mjs minor",
 		"release:major": "node scripts/release.mjs major",
@@ -51,11 +43,11 @@
 		"@mariozechner/pi-coding-agent": "^0.30.2",
 		"get-east-asian-width": "^1.4.0"
 	},
-	"overrides": {
-		"rimraf": "6.1.2",
-		"fast-xml-parser": "5.3.8",
-		"gaxios": {
-			"rimraf": "6.1.2"
+	"pnpm": {
+		"overrides": {
+			"rimraf": "6.1.2",
+			"fast-xml-parser": "5.3.8",
+			"gaxios>rimraf": "6.1.2"
 		}
 	}
 }

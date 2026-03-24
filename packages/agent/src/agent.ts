@@ -106,6 +106,11 @@ export interface AgentOptions {
 	/** Tool execution mode. Default: "parallel" */
 	toolExecution?: ToolExecutionMode;
 
+	/**
+	 * `"native"` = provider function calling; `"xml"` = XML-only (default). See {@link AgentLoopConfig.toolInvocation}.
+	 */
+	toolInvocation?: "native" | "xml";
+
 	/** Called before a tool is executed, after arguments have been validated. */
 	beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
 
@@ -144,6 +149,7 @@ export class Agent {
 	private _transport: Transport;
 	private _maxRetryDelayMs?: number;
 	private _toolExecution: ToolExecutionMode;
+	private _toolInvocation: "native" | "xml";
 	private _beforeToolCall?: (
 		context: BeforeToolCallContext,
 		signal?: AbortSignal,
@@ -167,6 +173,7 @@ export class Agent {
 		this._transport = opts.transport ?? "sse";
 		this._maxRetryDelayMs = opts.maxRetryDelayMs;
 		this._toolExecution = opts.toolExecution ?? "parallel";
+		this._toolInvocation = opts.toolInvocation ?? "xml";
 		this._beforeToolCall = opts.beforeToolCall;
 		this._afterToolCall = opts.afterToolCall;
 	}
@@ -537,6 +544,7 @@ export class Agent {
 			thinkingBudgets: this._thinkingBudgets,
 			maxRetryDelayMs: this._maxRetryDelayMs,
 			toolExecution: this._toolExecution,
+			toolInvocation: this._toolInvocation,
 			beforeToolCall: this._beforeToolCall,
 			afterToolCall: this._afterToolCall,
 			convertToLlm: this.convertToLlm,

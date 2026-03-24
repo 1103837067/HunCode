@@ -121,6 +121,7 @@ export class ToolExecutionComponent extends Container {
 			expanded: this.expanded,
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
+			toolResult: this.result,
 		};
 	}
 

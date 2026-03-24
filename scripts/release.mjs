@@ -6,7 +6,7 @@
  *
  * Steps:
  * 1. Check for uncommitted changes
- * 2. Bump version via npm run version:xxx
+ * 2. Bump version via pnpm run version:xxx
  * 3. Update CHANGELOG.md files: [Unreleased] -> [version] - date
  * 4. Commit and tag
  * 5. Publish to npm
@@ -104,7 +104,7 @@ console.log("  Working directory clean\n");
 
 // 2. Bump version
 console.log(`Bumping version (${BUMP_TYPE})...`);
-run(`npm run version:${BUMP_TYPE}`);
+run(`pnpm run version:${BUMP_TYPE}`);
 const version = getVersion();
 console.log(`  New version: ${version}\n`);
 
@@ -122,7 +122,7 @@ console.log();
 
 // 5. Publish
 console.log("Publishing to npm...");
-run("npm run publish");
+run("pnpm run publish");
 console.log();
 
 // 6. Add new [Unreleased] sections

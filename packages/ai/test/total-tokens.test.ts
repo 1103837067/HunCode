@@ -449,7 +449,7 @@ describe("totalTokens field", () => {
 			"anthropic/claude-sonnet-4 - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("openrouter", "anthropic/claude-sonnet-4");
+				const llm = getModel("openrouter", "auto");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
@@ -466,7 +466,7 @@ describe("totalTokens field", () => {
 			"deepseek/deepseek-chat - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("openrouter", "deepseek/deepseek-chat");
+				const llm = getModel("openrouter", "auto");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
@@ -483,7 +483,7 @@ describe("totalTokens field", () => {
 			"mistralai/mistral-small-3.2-24b-instruct - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("openrouter", "mistralai/mistral-small-3.2-24b-instruct");
+				const llm = getModel("openrouter", "auto");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
@@ -500,7 +500,7 @@ describe("totalTokens field", () => {
 			"google/gemini-2.0-flash-001 - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("openrouter", "google/gemini-2.0-flash-001");
+				const llm = getModel("openrouter", "auto");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
@@ -517,7 +517,7 @@ describe("totalTokens field", () => {
 			"meta-llama/llama-4-maverick - should return totalTokens equal to sum of components",
 			{ retry: 3, timeout: 60000 },
 			async () => {
-				const llm = getModel("openrouter", "meta-llama/llama-4-maverick");
+				const llm = getModel("openrouter", "auto");
 
 				console.log(`\nOpenRouter / ${llm.id}:`);
 				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });

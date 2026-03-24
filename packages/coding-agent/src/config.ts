@@ -63,7 +63,7 @@ export function getUpdateInstruction(packageName: string): string {
 		case "npm":
 			return `Run: npm install -g ${packageName}`;
 		default:
-			return `Run: npm install -g ${packageName}`;
+			return `Run: pnpm add -g ${packageName}`;
 	}
 }
 

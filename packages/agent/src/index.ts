@@ -6,3 +6,15 @@ export * from "./agent-loop.js";
 export * from "./proxy.js";
 // Types
 export * from "./types.js";
+// XML-only tool invocation (no provider function calling)
+export {
+	augmentAssistantMessageForXmlStreaming,
+	augmentAssistantMessageWithXmlToolCalls,
+	coerceXmlStringArgs,
+	defaultXmlRootTag,
+	type ParsedXmlToolCall,
+	parseXmlToolCallsFromText,
+	stripParsedXmlToolBlocksFromText,
+	stripStreamingXmlToolBlocksFromText,
+	syntheticXmlToolCallId,
+} from "./xml-tool-calls.js";

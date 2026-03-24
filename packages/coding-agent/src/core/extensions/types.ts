@@ -13,6 +13,7 @@ import type {
 	AgentToolResult,
 	AgentToolUpdateCallback,
 	ThinkingLevel,
+	XmlToolCallSpec,
 } from "@mariozechner/pi-agent-core";
 import type {
 	Api,
@@ -70,6 +71,7 @@ import type {
 	LsToolInput,
 	ReadToolDetails,
 	ReadToolInput,
+	WriteToolDetails,
 	WriteToolInput,
 } from "../tools/index.js";
 
@@ -356,7 +358,18 @@ export interface ToolRenderContext<TState = any, TArgs = any> {
 	showImages: boolean;
 	/** Whether the current result is an error. */
 	isError: boolean;
+	/**
+	 * When set, tool execution has finished (`tool_execution_end`).
+	 * Call renderers can hide redundant streaming previews (e.g. write: title only, diff in `renderResult`).
+	 */
+	toolResult?: {
+		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+		details?: unknown;
+		isError: boolean;
+	};
 }
+
+export type { XmlToolCallSpec };
 
 /**
  * Tool definition for registerTool().
@@ -374,6 +387,12 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	promptGuidelines?: string[];
 	/** Parameter schema (TypeBox) */
 	parameters: TParams;
+
+	/**
+	 * Morph-style XML layout ({@link XmlToolCallSpec}) for prompts and XML-only tool invocation.
+	 * With agent `toolInvocation: "xml"`, tools are not sent via provider function calling; this maps XML tags to parameters.
+	 */
+	xml?: XmlToolCallSpec;
 
 	/** Execute the tool. */
 	execute(
@@ -753,7 +772,7 @@ export interface EditToolResultEvent extends ToolResultEventBase {
 
 export interface WriteToolResultEvent extends ToolResultEventBase {
 	toolName: "write";
-	details: undefined;
+	details: WriteToolDetails | undefined;
 }
 
 export interface GrepToolResultEvent extends ToolResultEventBase {

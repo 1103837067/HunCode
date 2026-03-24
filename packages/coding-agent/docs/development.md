@@ -7,8 +7,8 @@ See [AGENTS.md](../../../AGENTS.md) for additional guidelines.
 ```bash
 git clone https://github.com/badlogic/pi-mono
 cd pi-mono
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 Run from source:
@@ -34,7 +34,7 @@ Change `name`, `configDir`, and `bin` field for your fork. Affects CLI banner, c
 
 ## Path Resolution
 
-Three execution modes: npm install, standalone binary, tsx from source.
+Three execution modes: pnpm install, standalone binary, tsx from source.
 
 **Always use `src/config.ts`** for package assets:
 
@@ -54,8 +54,8 @@ Never use `__dirname` directly for package assets.
 
 ```bash
 ./test.sh                         # Run non-LLM tests (no API keys needed)
-npm test                          # Run all tests
-npm test -- test/specific.test.ts # Run specific test
+pnpm test                         # Run all tests
+pnpm exec vitest --run test/specific.test.ts # Run specific test (from package dir)
 ```
 
 ## Project Structure

@@ -21,8 +21,16 @@ import type {
 	AgentToolResult,
 	StreamFn,
 } from "./types.js";
+import { augmentAssistantMessageForXmlStreaming, augmentAssistantMessageWithXmlToolCalls } from "./xml-tool-calls.js";
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
+
+function cloneAssistantMessageForXml(message: AssistantMessage): AssistantMessage {
+	return {
+		...message,
+		content: message.content.map((c) => ({ ...c })),
+	};
+}
 
 /**
  * Start an agent loop with a new prompt message.
@@ -251,11 +259,12 @@ async function streamAssistantResponse(
 	// Convert to LLM-compatible messages (AgentMessage[] → Message[])
 	const llmMessages = await config.convertToLlm(messages);
 
-	// Build LLM context
+	const nativeTools = config.toolInvocation === "native";
+	// Build LLM context (XML mode: never send tools to the API — no function calling)
 	const llmContext: Context = {
 		systemPrompt: context.systemPrompt,
 		messages: llmMessages,
-		tools: context.tools,
+		tools: nativeTools ? context.tools : [],
 	};
 
 	const streamFunction = streamFn || streamSimple;
@@ -279,7 +288,18 @@ async function streamAssistantResponse(
 				partialMessage = event.partial;
 				context.messages.push(partialMessage);
 				addedPartial = true;
-				await emit({ type: "message_start", message: { ...partialMessage } });
+				{
+					let out = partialMessage;
+					if (!nativeTools) {
+						out = augmentAssistantMessageForXmlStreaming(
+							cloneAssistantMessageForXml(partialMessage),
+							context.tools ?? [],
+						);
+						partialMessage = out;
+						context.messages[context.messages.length - 1] = out;
+					}
+					await emit({ type: "message_start", message: { ...out } });
+				}
 				break;
 
 			case "text_start":
@@ -293,18 +313,31 @@ async function streamAssistantResponse(
 			case "toolcall_end":
 				if (partialMessage) {
 					partialMessage = event.partial;
-					context.messages[context.messages.length - 1] = partialMessage;
+					let out: AssistantMessage = partialMessage;
+					if (!nativeTools) {
+						out = augmentAssistantMessageForXmlStreaming(
+							cloneAssistantMessageForXml(partialMessage),
+							context.tools ?? [],
+						);
+						partialMessage = out;
+						context.messages[context.messages.length - 1] = out;
+					} else {
+						context.messages[context.messages.length - 1] = partialMessage;
+					}
 					await emit({
 						type: "message_update",
 						assistantMessageEvent: event,
-						message: { ...partialMessage },
+						message: { ...out },
 					});
 				}
 				break;
 
 			case "done":
 			case "error": {
-				const finalMessage = await response.result();
+				let finalMessage = await response.result();
+				if (!nativeTools) {
+					finalMessage = augmentAssistantMessageWithXmlToolCalls(finalMessage, context.tools ?? []);
+				}
 				if (addedPartial) {
 					context.messages[context.messages.length - 1] = finalMessage;
 				} else {
@@ -319,7 +352,10 @@ async function streamAssistantResponse(
 		}
 	}
 
-	const finalMessage = await response.result();
+	let finalMessage = await response.result();
+	if (!nativeTools) {
+		finalMessage = augmentAssistantMessageWithXmlToolCalls(finalMessage, context.tools ?? []);
+	}
 	if (addedPartial) {
 		context.messages[context.messages.length - 1] = finalMessage;
 	} else {

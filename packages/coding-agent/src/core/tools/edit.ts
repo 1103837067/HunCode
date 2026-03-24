@@ -128,6 +128,14 @@ export function createEditToolDefinition(
 		promptSnippet: "Make surgical edits to files (find exact text and replace)",
 		promptGuidelines: ["Use edit for precise changes (old text must match exactly)."],
 		parameters: editSchema,
+		xml: {
+			rootTag: "edit",
+			parameterTags: {
+				path: "path",
+				oldText: "old_text",
+				newText: "new_text",
+			},
+		},
 		async execute(
 			_toolCallId,
 			{ path, oldText, newText }: { path: string; oldText: string; newText: string },

@@ -92,6 +92,7 @@ describe("agentLoop with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 		};
 
@@ -153,6 +154,7 @@ describe("agentLoop with AgentMessage", () => {
 		let convertedMessages: Message[] = [];
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: (messages) => {
 				// Filter out notifications, convert rest
 				convertedMessages = messages
@@ -202,6 +204,7 @@ describe("agentLoop with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			transformContext: async (messages) => {
 				// Keep only last 2 messages (prune old ones)
 				transformedMessages = messages.slice(-2);
@@ -263,6 +266,7 @@ describe("agentLoop with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 		};
 
@@ -345,6 +349,7 @@ describe("agentLoop with AgentMessage", () => {
 		const userPrompt: AgentMessage = createUserMessage("echo both");
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 			toolExecution: "parallel",
 		};
@@ -420,6 +425,7 @@ describe("agentLoop with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 			toolExecution: "sequential",
 			getSteeringMessages: async () => {
@@ -505,6 +511,7 @@ describe("agentLoopContinue with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 		};
 
@@ -522,6 +529,7 @@ describe("agentLoopContinue with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: identityConverter,
 		};
 
@@ -575,6 +583,7 @@ describe("agentLoopContinue with AgentMessage", () => {
 
 		const config: AgentLoopConfig = {
 			model: createModel(),
+			toolInvocation: "native",
 			convertToLlm: (messages) => {
 				// Convert custom to user message
 				return messages

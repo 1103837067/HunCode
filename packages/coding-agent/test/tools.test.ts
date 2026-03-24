@@ -199,7 +199,9 @@ describe("Coding Agent Tools", () => {
 
 			expect(getTextOutput(result)).toContain("Successfully wrote");
 			expect(getTextOutput(result)).toContain(testFile);
-			expect(result.details).toBeUndefined();
+			expect(result.details).toBeDefined();
+			expect(result.details?.diff).toBeDefined();
+			expect(typeof result.details?.diff).toBe("string");
 		});
 
 		it("should create parent directories", async () => {
@@ -209,6 +211,19 @@ describe("Coding Agent Tools", () => {
 			const result = await writeTool.execute("test-call-4", { path: testFile, content });
 
 			expect(getTextOutput(result)).toContain("Successfully wrote");
+			expect(result.details?.diff).toBeDefined();
+		});
+
+		it("should include diff when overwriting an existing file", async () => {
+			const testFile = join(testDir, "overwrite-write.txt");
+			writeFileSync(testFile, "old line\n");
+			const result = await writeTool.execute("test-call-3b", {
+				path: testFile,
+				content: "new line\n",
+			});
+			expect(result.details?.diff).toBeDefined();
+			expect(result.details?.diff).toContain("old line");
+			expect(result.details?.diff).toContain("new line");
 		});
 	});
 

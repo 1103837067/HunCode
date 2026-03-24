@@ -25,6 +25,8 @@ packages/*/dist-firefox/
 coverage/
 .nyc_output/
 .pi_config/
+# Local agent secrets (use ~/.pi/agent/models.json for global config)
+.pi/agent/models.json
 tui-debug.log
 compaction-results/
 .opencode/

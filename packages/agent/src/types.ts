@@ -34,6 +34,15 @@ export type StreamFn = (
  */
 export type ToolExecutionMode = "sequential" | "parallel";
 
+/**
+ * Morph-style XML tool layout: root element + mapping from JSON parameter keys to child tag names.
+ */
+export interface XmlToolCallSpec {
+	/** Root element name (e.g. `edit`). Defaults to snake_case of the tool `name`. */
+	rootTag?: string;
+	parameterTags: Record<string, string>;
+}
+
 /** A single tool call content block emitted by an assistant message. */
 export type AgentToolCall = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
 
@@ -95,6 +104,15 @@ export interface AfterToolCallContext {
 
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
+
+	/**
+	 * How tools are invoked toward the LLM:
+	 * - `"native"`: provider function-calling (tools JSON schema in the API request).
+	 * - `"xml"`: send **no** tools to the API; after each assistant reply, parse Morph-style XML from assistant text and execute tools locally.
+	 *
+	 * Default: `"xml"` (XML-only; no function calling).
+	 */
+	toolInvocation?: "native" | "xml";
 
 	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
@@ -273,6 +291,8 @@ export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
 	// A human-readable label for the tool to be displayed in UI
 	label: string;
+	/** When using {@link AgentLoopConfig.toolInvocation} `"xml"`, required for tools that can be invoked via XML. */
+	xml?: XmlToolCallSpec;
 	execute: (
 		toolCallId: string,
 		params: Static<TParameters>,

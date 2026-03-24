@@ -277,7 +277,7 @@ describe("Tool Results with Images", () => {
 	});
 
 	describe.skipIf(!process.env.OPENROUTER_API_KEY)("OpenRouter Provider (glm-4.5v)", () => {
-		const llm = getModel("openrouter", "z-ai/glm-4.5v");
+		const llm = getModel("openrouter", "auto");
 
 		it("should handle tool result with only image", { retry: 3, timeout: 30000 }, async () => {
 			await handleToolWithImageResult(llm);

@@ -56,10 +56,12 @@ if [[ -n "$PLATFORM" ]]; then
 fi
 
 echo "==> Installing dependencies..."
-npm ci
+pnpm install --frozen-lockfile
 
 if [[ "$SKIP_DEPS" == "false" ]]; then
     echo "==> Installing cross-platform native bindings..."
+    # Primary install is pnpm; npm is used here for a single no-save multi-platform optional pass
+    # (mirrors upstream binary build workflow; optional deps for non-current platforms).
     # npm ci only installs optional deps for the current platform
     # We need all platform bindings for bun cross-compilation
     # Use --force to bypass platform checks (os/cpu restrictions in package.json)
@@ -84,7 +86,7 @@ else
 fi
 
 echo "==> Building all packages..."
-npm run build
+pnpm run build
 
 echo "==> Building binaries..."
 cd packages/coding-agent

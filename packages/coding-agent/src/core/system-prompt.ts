@@ -3,7 +3,10 @@
  */
 
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
+import { buildCursorStyleDefaultSystemPrompt } from "./cursor-style-system-prompt.js";
+import type { ToolDefinition } from "./extensions/types.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
+import { buildXmlToolCallsPromptSection } from "./xml-tool-registration.js";
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -12,7 +15,7 @@ export interface BuildSystemPromptOptions {
 	selectedTools?: string[];
 	/** Optional one-line tool snippets keyed by tool name. */
 	toolSnippets?: Record<string, string>;
-	/** Additional guideline bullets appended to the default system prompt guidelines. */
+	/** Additional guideline bullets appended after the default gist-style body (## Additional guidelines). */
 	promptGuidelines?: string[];
 	/** Text to append to system prompt. */
 	appendSystemPrompt?: string;
@@ -22,6 +25,11 @@ export interface BuildSystemPromptOptions {
 	contextFiles?: Array<{ path: string; content: string }>;
 	/** Pre-loaded skills. */
 	skills?: Skill[];
+	/**
+	 * Tools that declare `ToolDefinition.xml`. When non-empty, appends Morph-style XML documentation
+	 * for those tools (same parameters as the JSON tool API).
+	 */
+	xmlToolDefinitions?: ToolDefinition[];
 }
 
 /** Build the system prompt with tools, guidelines, and context */
@@ -35,6 +43,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 		cwd,
 		contextFiles: providedContextFiles,
 		skills: providedSkills,
+		xmlToolDefinitions,
 	} = options;
 	const resolvedCwd = cwd ?? process.cwd();
 	const promptCwd = resolvedCwd.replace(/\\/g, "/");
@@ -68,6 +77,8 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 			prompt += formatSkillsForPrompt(skills);
 		}
 
+		prompt += buildXmlToolCallsPromptSection(xmlToolDefinitions ?? []);
+
 		// Add date and working directory last
 		prompt += `\nCurrent date: ${date}`;
 		prompt += `\nCurrent working directory: ${promptCwd}`;
@@ -87,60 +98,30 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 	const toolsList =
 		visibleTools.length > 0 ? visibleTools.map((name) => `- ${name}: ${toolSnippets![name]}`).join("\n") : "(none)";
 
-	// Build guidelines based on which tools are actually available
-	const guidelinesList: string[] = [];
-	const guidelinesSet = new Set<string>();
-	const addGuideline = (guideline: string): void => {
-		if (guidelinesSet.has(guideline)) {
-			return;
-		}
-		guidelinesSet.add(guideline);
-		guidelinesList.push(guideline);
-	};
-
-	const hasBash = tools.includes("bash");
-	const hasGrep = tools.includes("grep");
-	const hasFind = tools.includes("find");
-	const hasLs = tools.includes("ls");
 	const hasRead = tools.includes("read");
 
-	// File exploration guidelines
-	if (hasBash && !hasGrep && !hasFind && !hasLs) {
-		addGuideline("Use bash for file operations like ls, rg, find");
-	} else if (hasBash && (hasGrep || hasFind || hasLs)) {
-		addGuideline("Prefer grep/find/ls tools over bash for file exploration (faster, respects .gitignore)");
-	}
+	let prompt = buildCursorStyleDefaultSystemPrompt({
+		toolsList,
+		selectedTools: tools,
+		readmePath,
+		docsPath,
+		examplesPath,
+	});
 
-	for (const guideline of promptGuidelines ?? []) {
-		const normalized = guideline.trim();
-		if (normalized.length > 0) {
-			addGuideline(normalized);
+	if (promptGuidelines?.length) {
+		const guidelinesSet = new Set<string>();
+		const guidelinesList: string[] = [];
+		for (const guideline of promptGuidelines) {
+			const normalized = guideline.trim();
+			if (normalized.length > 0 && !guidelinesSet.has(normalized)) {
+				guidelinesSet.add(normalized);
+				guidelinesList.push(normalized);
+			}
+		}
+		if (guidelinesList.length > 0) {
+			prompt += `\n\n## Additional guidelines\n\n${guidelinesList.map((g) => `- ${g}`).join("\n")}`;
 		}
 	}
-
-	// Always include these
-	addGuideline("Be concise in your responses");
-	addGuideline("Show file paths clearly when working with files");
-
-	const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
-
-	let prompt = `You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.
-
-Available tools:
-${toolsList}
-
-In addition to the tools above, you may have access to other custom tools depending on the project.
-
-Guidelines:
-${guidelines}
-
-Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
-- Main documentation: ${readmePath}
-- Additional docs: ${docsPath}
-- Examples: ${examplesPath} (extensions, custom tools, SDK)
-- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md)
-- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
-- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
 
 	if (appendSection) {
 		prompt += appendSection;
@@ -159,6 +140,8 @@ Pi documentation (read only when the user asks about pi itself, its SDK, extensi
 	if (hasRead && skills.length > 0) {
 		prompt += formatSkillsForPrompt(skills);
 	}
+
+	prompt += buildXmlToolCallsPromptSection(xmlToolDefinitions ?? []);
 
 	// Add date and working directory last
 	prompt += `\nCurrent date: ${date}`;

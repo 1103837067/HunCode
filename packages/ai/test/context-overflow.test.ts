@@ -484,7 +484,7 @@ describe("Context overflow error handling", () => {
 	describe.skipIf(!process.env.OPENROUTER_API_KEY)("OpenRouter", () => {
 		// Anthropic backend
 		it("anthropic/claude-sonnet-4 via OpenRouter - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("openrouter", "anthropic/claude-sonnet-4");
+			const model = getModel("openrouter", "auto");
 			const result = await testContextOverflow(model, process.env.OPENROUTER_API_KEY!);
 			logResult(result);
 
@@ -495,7 +495,7 @@ describe("Context overflow error handling", () => {
 
 		// DeepSeek backend
 		it("deepseek/deepseek-v3.2 via OpenRouter - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("openrouter", "deepseek/deepseek-v3.2");
+			const model = getModel("openrouter", "auto");
 			const result = await testContextOverflow(model, process.env.OPENROUTER_API_KEY!);
 			logResult(result);
 
@@ -506,7 +506,7 @@ describe("Context overflow error handling", () => {
 
 		// Mistral backend
 		it("mistralai/mistral-large-2512 via OpenRouter - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("openrouter", "mistralai/mistral-large-2512");
+			const model = getModel("openrouter", "auto");
 			const result = await testContextOverflow(model, process.env.OPENROUTER_API_KEY!);
 			logResult(result);
 
@@ -517,7 +517,7 @@ describe("Context overflow error handling", () => {
 
 		// Google backend
 		it("google/gemini-2.5-flash via OpenRouter - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("openrouter", "google/gemini-2.5-flash");
+			const model = getModel("openrouter", "auto");
 			const result = await testContextOverflow(model, process.env.OPENROUTER_API_KEY!);
 			logResult(result);
 
@@ -528,7 +528,7 @@ describe("Context overflow error handling", () => {
 
 		// Meta/Llama backend
 		it("meta-llama/llama-4-maverick via OpenRouter - should detect overflow via isContextOverflow", async () => {
-			const model = getModel("openrouter", "meta-llama/llama-4-maverick");
+			const model = getModel("openrouter", "auto");
 			const result = await testContextOverflow(model, process.env.OPENROUTER_API_KEY!);
 			logResult(result);
 

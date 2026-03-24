@@ -25,8 +25,8 @@ This exists because AI makes it trivial to generate plausible-looking but low-qu
 ## Before Submitting a PR
 
 ```bash
-npm run check  # must pass with no errors
-./test.sh      # must pass
+pnpm run check  # must pass with no errors
+./test.sh       # must pass
 ```
 
 Do not edit `CHANGELOG.md`. Changelog entries are added by maintainers.

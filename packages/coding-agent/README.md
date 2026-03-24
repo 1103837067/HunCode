@@ -59,7 +59,7 @@ Pi runs in four modes: interactive, print or JSON, RPC for process integration, 
 ## Quick Start
 
 ```bash
-npm install -g @mariozechner/pi-coding-agent
+pnpm add -g @mariozechner/pi-coding-agent
 ```
 
 Authenticate with an API key:

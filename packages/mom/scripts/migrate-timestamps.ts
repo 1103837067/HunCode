@@ -1,9 +1,9 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env -S pnpm exec tsx
 /**
  * Migrate log.jsonl timestamps from milliseconds to Slack format (seconds.microseconds)
- * 
- * Usage: npx tsx scripts/migrate-timestamps.ts <data-dir>
- * Example: npx tsx scripts/migrate-timestamps.ts ./data
+ *
+ * Usage: pnpm exec tsx scripts/migrate-timestamps.ts <data-dir> (from packages/mom)
+ * Example: pnpm exec tsx scripts/migrate-timestamps.ts ./data
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "fs";
@@ -94,8 +94,8 @@ function findLogFiles(dir: string): string[] {
 // Main
 const dataDir = process.argv[2];
 if (!dataDir) {
-	console.error("Usage: npx tsx scripts/migrate-timestamps.ts <data-dir>");
-	console.error("Example: npx tsx scripts/migrate-timestamps.ts ./data");
+	console.error("Usage: pnpm exec tsx scripts/migrate-timestamps.ts <data-dir>");
+	console.error("Example: pnpm exec tsx scripts/migrate-timestamps.ts ./data");
 	process.exit(1);
 }
 

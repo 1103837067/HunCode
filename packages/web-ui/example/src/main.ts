@@ -2,9 +2,11 @@ import "@mariozechner/mini-lit/dist/ThemeToggle.js";
 import { Agent, type AgentMessage } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
 import {
+	type AgentInterface,
 	type AgentState,
 	ApiKeyPromptDialog,
 	AppStorage,
+	type ArtifactsPanel,
 	ChatPanel,
 	CustomProvidersStore,
 	createJavaScriptReplTool,
@@ -13,6 +15,7 @@ import {
 	ProviderKeysStore,
 	ProvidersModelsTab,
 	ProxyTab,
+	type SandboxRuntimeProvider,
 	SessionListDialog,
 	SessionsStore,
 	SettingsDialog,
@@ -69,9 +72,15 @@ let agent: Agent;
 let chatPanel: ChatPanel;
 let agentUnsubscribe: (() => void) | undefined;
 
+function isUserLikeMessage(m: AgentMessage): m is Extract<AgentMessage, { role: "user" | "user-with-attachments" }> {
+	return m.role === "user" || m.role === "user-with-attachments";
+}
+
 const generateTitle = (messages: AgentMessage[]): string => {
-	const firstUserMsg = messages.find((m) => m.role === "user" || m.role === "user-with-attachments");
-	if (!firstUserMsg || (firstUserMsg.role !== "user" && firstUserMsg.role !== "user-with-attachments")) return "";
+	const firstUserMsg = messages.find(isUserLikeMessage);
+	if (!firstUserMsg) {
+		return "";
+	}
 
 	let text = "";
 	const content = firstUserMsg.content;
@@ -79,8 +88,8 @@ const generateTitle = (messages: AgentMessage[]): string => {
 	if (typeof content === "string") {
 		text = content;
 	} else {
-		const textBlocks = content.filter((c: any) => c.type === "text");
-		text = textBlocks.map((c: any) => c.text || "").join(" ");
+		const textBlocks = content.filter((c): c is { type: "text"; text: string } => c.type === "text");
+		text = textBlocks.map((c) => c.text || "").join(" ");
 	}
 
 	text = text.trim();
@@ -94,8 +103,8 @@ const generateTitle = (messages: AgentMessage[]): string => {
 };
 
 const shouldSaveSession = (messages: AgentMessage[]): boolean => {
-	const hasUserMsg = messages.some((m: any) => m.role === "user" || m.role === "user-with-attachments");
-	const hasAssistantMsg = messages.some((m: any) => m.role === "assistant");
+	const hasUserMsg = messages.some((m) => m.role === "user" || m.role === "user-with-attachments");
+	const hasAssistantMsg = messages.some((m) => m.role === "assistant");
 	return hasUserMsg && hasAssistantMsg;
 };
 
@@ -206,7 +215,12 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 		onApiKeyRequired: async (provider: string) => {
 			return await ApiKeyPromptDialog.prompt(provider);
 		},
-		toolsFactory: (_agent, _agentInterface, _artifactsPanel, runtimeProvidersFactory) => {
+		toolsFactory: (
+			_agent: Agent,
+			_agentInterface: AgentInterface,
+			_artifactsPanel: ArtifactsPanel,
+			runtimeProvidersFactory: () => SandboxRuntimeProvider[],
+		) => {
 			// Create javascript_repl tool with access to attachments + artifacts
 			const replTool = createJavaScriptReplTool();
 			replTool.runtimeProvidersFactory = runtimeProvidersFactory;
@@ -264,10 +278,10 @@ const renderApp = () => {
 						children: icon(History, "sm"),
 						onClick: () => {
 							SessionListDialog.open(
-								async (sessionId) => {
+								async (sessionId: string) => {
 									await loadSession(sessionId);
 								},
-								(deletedSessionId) => {
+								(deletedSessionId: string) => {
 									// Only reload if the current session was deleted
 									if (deletedSessionId === currentSessionId) {
 										newSession();

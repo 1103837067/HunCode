@@ -257,13 +257,6 @@ export function createWriteToolDefinition(
 		promptSnippet: "Create or overwrite files",
 		promptGuidelines: ["Use write only for new files or complete rewrites."],
 		parameters: writeSchema,
-		xml: {
-			rootTag: "write",
-			parameterTags: {
-				path: "path",
-				content: "file_content",
-			},
-		},
 		async execute(
 			_toolCallId,
 			{ path, content }: { path: string; content: string },

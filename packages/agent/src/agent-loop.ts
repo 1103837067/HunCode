@@ -21,7 +21,13 @@ import type {
 	AgentToolResult,
 	StreamFn,
 } from "./types.js";
-import { augmentAssistantMessageForXmlStreaming, augmentAssistantMessageWithXmlToolCalls } from "./xml-tool-calls.js";
+import {
+	augmentAssistantMessageForXmlStreaming,
+	augmentAssistantMessageWithXmlToolCalls,
+	coerceXmlStringArgs,
+	parseCompletedInvokeBlocks,
+	syntheticXmlToolCallId,
+} from "./xml-tool-calls.js";
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
@@ -158,6 +164,70 @@ function createAgentStream(): EventStream<AgentEvent, AgentMessage[]> {
 }
 
 /**
+ * Collect tool results, merging early-started executions with any remaining.
+ *
+ * Early-started tools have already emitted `tool_execution_end` (UI updated).
+ * This function only emits `message_start`/`message_end` for conversation history.
+ * Non-early tools go through the full execution + finalize pipeline.
+ */
+async function collectToolResults(
+	currentContext: AgentContext,
+	assistantMessage: AssistantMessage,
+	toolCalls: AgentToolCall[],
+	earlyExecutions: Map<string, Promise<FinalizedEarlyOutcome>>,
+	config: AgentLoopConfig,
+	signal: AbortSignal | undefined,
+	emit: AgentEventSink,
+): Promise<ToolResultMessage[]> {
+	const results: ToolResultMessage[] = [];
+
+	for (const toolCall of toolCalls) {
+		const earlyExec = earlyExecutions.get(toolCall.id);
+		if (earlyExec) {
+			const executed = await earlyExec;
+			const toolResultMessage: ToolResultMessage = {
+				role: "toolResult",
+				toolCallId: toolCall.id,
+				toolName: toolCall.name,
+				content: executed.result.content,
+				details: executed.result.details,
+				isError: executed.isError,
+				timestamp: Date.now(),
+			};
+			await emit({ type: "message_start", message: toolResultMessage });
+			await emit({ type: "message_end", message: toolResultMessage });
+			results.push(toolResultMessage);
+		} else {
+			await emit({
+				type: "tool_execution_start",
+				toolCallId: toolCall.id,
+				toolName: toolCall.name,
+				args: toolCall.arguments,
+			});
+			const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
+			if (preparation.kind === "immediate") {
+				results.push(await emitToolCallOutcome(toolCall, preparation.result, preparation.isError, emit));
+			} else {
+				const executed = await executePreparedToolCall(preparation, signal, emit);
+				results.push(
+					await finalizeExecutedToolCall(
+						currentContext,
+						assistantMessage,
+						preparation,
+						executed,
+						config,
+						signal,
+						emit,
+					),
+				);
+			}
+		}
+	}
+
+	return results;
+}
+
+/**
  * Main loop logic shared by agentLoop and agentLoopContinue.
  */
 async function runLoop(
@@ -195,8 +265,73 @@ async function runLoop(
 				pendingMessages = [];
 			}
 
-			// Stream assistant response
-			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn);
+			// Early execution: start tool calls as soon as their </invoke> is received
+			const earlyExecutions = new Map<string, Promise<FinalizedEarlyOutcome>>();
+
+			const onInvokeComplete: OnInvokeComplete = (toolCall, partialMsg) => {
+				const execution = (async (): Promise<FinalizedEarlyOutcome> => {
+					await emit({
+						type: "tool_execution_start",
+						toolCallId: toolCall.id,
+						toolName: toolCall.name,
+						args: toolCall.arguments,
+					});
+					const prep = await prepareToolCall(currentContext, partialMsg, toolCall, config, signal);
+
+					let result: AgentToolResult<any>;
+					let isError: boolean;
+
+					if (prep.kind === "immediate") {
+						result = prep.result;
+						isError = prep.isError;
+					} else {
+						const executed = await executePreparedToolCall(prep, signal, emit);
+						result = executed.result;
+						isError = executed.isError;
+
+						if (config.afterToolCall) {
+							const afterResult = await config.afterToolCall(
+								{
+									assistantMessage: partialMsg,
+									toolCall: prep.toolCall,
+									args: prep.args,
+									result,
+									isError,
+									context: currentContext,
+								},
+								signal,
+							);
+							if (afterResult) {
+								result = {
+									content: afterResult.content ?? result.content,
+									details: afterResult.details ?? result.details,
+								};
+								isError = afterResult.isError ?? isError;
+							}
+						}
+					}
+
+					await emit({
+						type: "tool_execution_end",
+						toolCallId: toolCall.id,
+						toolName: toolCall.name,
+						result,
+						isError,
+					});
+
+					return { result, isError, finalized: true };
+				})();
+				earlyExecutions.set(toolCall.id, execution);
+			};
+
+			const message = await streamAssistantResponse(
+				currentContext,
+				config,
+				signal,
+				emit,
+				streamFn,
+				config.toolInvocation !== "native" ? onInvokeComplete : undefined,
+			);
 			newMessages.push(message);
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
@@ -211,7 +346,17 @@ async function runLoop(
 
 			const toolResults: ToolResultMessage[] = [];
 			if (hasMoreToolCalls) {
-				toolResults.push(...(await executeToolCalls(currentContext, message, config, signal, emit)));
+				toolResults.push(
+					...(await collectToolResults(
+						currentContext,
+						message,
+						toolCalls as AgentToolCall[],
+						earlyExecutions,
+						config,
+						signal,
+						emit,
+					)),
+				);
 
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
@@ -239,9 +384,15 @@ async function runLoop(
 	await emit({ type: "agent_end", messages: newMessages });
 }
 
+/** Callback invoked when a complete `<invoke>` block is detected during streaming. */
+type OnInvokeComplete = (toolCall: AgentToolCall, partialMessage: AssistantMessage) => void;
+
 /**
  * Stream an assistant response from the LLM.
  * This is where AgentMessage[] gets transformed to Message[] for the LLM.
+ *
+ * @param onInvokeComplete - In XML mode, called as soon as each `</invoke>` is received
+ *   so the caller can start tool execution before the stream finishes.
  */
 async function streamAssistantResponse(
 	context: AgentContext,
@@ -249,6 +400,7 @@ async function streamAssistantResponse(
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
 	streamFn?: StreamFn,
+	onInvokeComplete?: OnInvokeComplete,
 ): Promise<AssistantMessage> {
 	// Apply context transform if configured (AgentMessage[] → AgentMessage[])
 	let messages = context.messages;
@@ -281,6 +433,38 @@ async function streamAssistantResponse(
 
 	let partialMessage: AssistantMessage | null = null;
 	let addedPartial = false;
+	let prevCompleteCount = 0;
+
+	/** Extract raw assistant text from the partial message for invoke detection. */
+	function getRawText(msg: AssistantMessage): string {
+		return msg.content
+			.filter((c): c is { type: "text"; text: string } => c.type === "text")
+			.map((c) => c.text)
+			.join("\n");
+	}
+
+	/** Detect newly completed <invoke> blocks and notify caller with the current partial message. */
+	function detectNewInvokes(rawMsg: AssistantMessage): void {
+		if (nativeTools || !onInvokeComplete) return;
+		const tools = context.tools ?? [];
+		const rawText = getRawText(rawMsg);
+		const completed = parseCompletedInvokeBlocks(rawText, tools);
+		if (completed.length > prevCompleteCount) {
+			for (let i = prevCompleteCount; i < completed.length; i++) {
+				const p = completed[i];
+				onInvokeComplete(
+					{
+						type: "toolCall",
+						id: syntheticXmlToolCallId(i),
+						name: p.name,
+						arguments: coerceXmlStringArgs(p.arguments),
+					},
+					rawMsg,
+				);
+			}
+			prevCompleteCount = completed.length;
+		}
+	}
 
 	for await (const event of response) {
 		switch (event.type) {
@@ -289,6 +473,7 @@ async function streamAssistantResponse(
 				context.messages.push(partialMessage);
 				addedPartial = true;
 				{
+					const rawPartial = partialMessage;
 					let out = partialMessage;
 					if (!nativeTools) {
 						out = augmentAssistantMessageForXmlStreaming(
@@ -299,6 +484,7 @@ async function streamAssistantResponse(
 						context.messages[context.messages.length - 1] = out;
 					}
 					await emit({ type: "message_start", message: { ...out } });
+					detectNewInvokes(rawPartial);
 				}
 				break;
 
@@ -312,6 +498,7 @@ async function streamAssistantResponse(
 			case "toolcall_delta":
 			case "toolcall_end":
 				if (partialMessage) {
+					const rawPartial = event.partial;
 					partialMessage = event.partial;
 					let out: AssistantMessage = partialMessage;
 					if (!nativeTools) {
@@ -329,6 +516,7 @@ async function streamAssistantResponse(
 						assistantMessageEvent: event,
 						message: { ...out },
 					});
+					detectNewInvokes(rawPartial);
 				}
 				break;
 
@@ -366,113 +554,6 @@ async function streamAssistantResponse(
 	return finalMessage;
 }
 
-/**
- * Execute tool calls from an assistant message.
- */
-async function executeToolCalls(
-	currentContext: AgentContext,
-	assistantMessage: AssistantMessage,
-	config: AgentLoopConfig,
-	signal: AbortSignal | undefined,
-	emit: AgentEventSink,
-): Promise<ToolResultMessage[]> {
-	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
-	if (config.toolExecution === "sequential") {
-		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
-	}
-	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
-}
-
-async function executeToolCallsSequential(
-	currentContext: AgentContext,
-	assistantMessage: AssistantMessage,
-	toolCalls: AgentToolCall[],
-	config: AgentLoopConfig,
-	signal: AbortSignal | undefined,
-	emit: AgentEventSink,
-): Promise<ToolResultMessage[]> {
-	const results: ToolResultMessage[] = [];
-
-	for (const toolCall of toolCalls) {
-		await emit({
-			type: "tool_execution_start",
-			toolCallId: toolCall.id,
-			toolName: toolCall.name,
-			args: toolCall.arguments,
-		});
-
-		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
-		if (preparation.kind === "immediate") {
-			results.push(await emitToolCallOutcome(toolCall, preparation.result, preparation.isError, emit));
-		} else {
-			const executed = await executePreparedToolCall(preparation, signal, emit);
-			results.push(
-				await finalizeExecutedToolCall(
-					currentContext,
-					assistantMessage,
-					preparation,
-					executed,
-					config,
-					signal,
-					emit,
-				),
-			);
-		}
-	}
-
-	return results;
-}
-
-async function executeToolCallsParallel(
-	currentContext: AgentContext,
-	assistantMessage: AssistantMessage,
-	toolCalls: AgentToolCall[],
-	config: AgentLoopConfig,
-	signal: AbortSignal | undefined,
-	emit: AgentEventSink,
-): Promise<ToolResultMessage[]> {
-	const results: ToolResultMessage[] = [];
-	const runnableCalls: PreparedToolCall[] = [];
-
-	for (const toolCall of toolCalls) {
-		await emit({
-			type: "tool_execution_start",
-			toolCallId: toolCall.id,
-			toolName: toolCall.name,
-			args: toolCall.arguments,
-		});
-
-		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
-		if (preparation.kind === "immediate") {
-			results.push(await emitToolCallOutcome(toolCall, preparation.result, preparation.isError, emit));
-		} else {
-			runnableCalls.push(preparation);
-		}
-	}
-
-	const runningCalls = runnableCalls.map((prepared) => ({
-		prepared,
-		execution: executePreparedToolCall(prepared, signal, emit),
-	}));
-
-	for (const running of runningCalls) {
-		const executed = await running.execution;
-		results.push(
-			await finalizeExecutedToolCall(
-				currentContext,
-				assistantMessage,
-				running.prepared,
-				executed,
-				config,
-				signal,
-				emit,
-			),
-		);
-	}
-
-	return results;
-}
-
 type PreparedToolCall = {
 	kind: "prepared";
 	toolCall: AgentToolCall;
@@ -490,6 +571,13 @@ type ExecutedToolCallOutcome = {
 	result: AgentToolResult<any>;
 	isError: boolean;
 };
+
+/**
+ * Outcome of an early-started tool that already emitted `tool_execution_end`.
+ * `collectToolResults` skips re-emitting the end event and only builds the
+ * ToolResultMessage for conversation history.
+ */
+type FinalizedEarlyOutcome = ExecutedToolCallOutcome & { finalized: true };
 
 async function prepareToolCall(
 	currentContext: AgentContext,

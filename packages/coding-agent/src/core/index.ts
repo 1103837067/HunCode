@@ -61,7 +61,6 @@ export {
 export { createSyntheticSourceInfo } from "./source-info.js";
 export {
 	buildXmlToolCallsPromptSection,
-	defaultXmlRootTag,
 	invertXmlParameterTags,
 	type ParsedXmlToolCall,
 	parseXmlToolCallsFromText,

@@ -56,12 +56,19 @@ export class ToolExecutionComponent extends Container {
 		this.ui = ui;
 		this.cwd = cwd;
 
-		this.addChild(new Spacer(1));
+		if (!this.isCompactReadTool()) {
+			this.addChild(new Spacer(1));
+		}
 
-		// Always create both. contentBox is used for tools with renderer-based call/result composition.
-		// contentText is reserved for generic fallback rendering when no tool definition exists.
-		this.contentBox = new Box(1, 1, (text: string) => theme.bg("toolPendingBg", text));
-		this.contentText = new Text("", 1, 1, (text: string) => theme.bg("toolPendingBg", text));
+		this.contentBox = new Box(this.isCompactReadTool() ? 0 : 1, this.isCompactReadTool() ? 0 : 1, (text: string) =>
+			this.getBackgroundRenderer()(text),
+		);
+		this.contentText = new Text(
+			"",
+			this.isCompactReadTool() ? 0 : 1,
+			this.isCompactReadTool() ? 0 : 1,
+			(text: string) => this.getBackgroundRenderer()(text),
+		);
 
 		if (this.hasRendererDefinition()) {
 			this.addChild(this.contentBox);
@@ -70,6 +77,23 @@ export class ToolExecutionComponent extends Container {
 		}
 
 		this.updateDisplay();
+	}
+
+	private isCompactReadTool(): boolean {
+		return this.toolName === "read";
+	}
+
+	private getBackgroundRenderer(): (text: string) => string {
+		if (this.isCompactReadTool()) {
+			return (text: string) => text;
+		}
+		if (this.isPartial) {
+			return (text: string) => theme.bg("toolPendingBg", text);
+		}
+		if (this.result?.isError) {
+			return (text: string) => theme.bg("toolErrorBg", text);
+		}
+		return (text: string) => theme.bg("toolSuccessBg", text);
 	}
 
 	private isBuiltInDefinition(definition: ToolDefinition<any, any> | undefined): boolean {
@@ -214,11 +238,7 @@ export class ToolExecutionComponent extends Container {
 	}
 
 	private updateDisplay(): void {
-		const bgFn = this.isPartial
-			? (text: string) => theme.bg("toolPendingBg", text)
-			: this.result?.isError
-				? (text: string) => theme.bg("toolErrorBg", text)
-				: (text: string) => theme.bg("toolSuccessBg", text);
+		const bgFn = this.getBackgroundRenderer();
 
 		let hasContent = false;
 		this.hideComponent = false;
@@ -260,8 +280,11 @@ export class ToolExecutionComponent extends Container {
 							this.getRenderContext(this.resultRendererComponent),
 						);
 						this.resultRendererComponent = component;
-						this.contentBox.addChild(component);
-						hasContent = true;
+						const rendered = component.render(200).join("\n").trim();
+						if (rendered.length > 0) {
+							this.contentBox.addChild(component);
+							hasContent = true;
+						}
 					} catch {
 						this.resultRendererComponent = undefined;
 						const component = this.createResultFallback();

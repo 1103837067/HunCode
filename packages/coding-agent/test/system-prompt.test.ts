@@ -97,15 +97,14 @@ describe("buildSystemPrompt", () => {
 	});
 
 	describe("xml tool definitions", () => {
-		test("appends Morph-style XML section when xmlToolDefinitions provided", () => {
+		test("appends Cursor-style XML section when xmlToolDefinitions provided", () => {
 			const xmlTool: ToolDefinition = {
 				name: "edit",
 				label: "edit",
 				description: "d",
 				parameters: {} as never,
 				xml: {
-					rootTag: "edit",
-					parameterTags: { path: "path", oldText: "old_text", newText: "new_text" },
+					parameterTags: { path: "path", oldText: "oldText", newText: "newText" },
 				},
 				async execute() {
 					return { content: [], details: {} };
@@ -118,9 +117,9 @@ describe("buildSystemPrompt", () => {
 				skills: [],
 				xmlToolDefinitions: [xmlTool],
 			});
-			expect(prompt).toContain("## XML-shaped tool calls");
+			expect(prompt).toContain("## Tool invocation format");
 			expect(prompt).toContain("function-calling");
-			expect(prompt).toContain("<edit>");
+			expect(prompt).toContain('<invoke name="edit">');
 		});
 	});
 });

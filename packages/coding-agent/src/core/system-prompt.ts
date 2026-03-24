@@ -2,11 +2,24 @@
  * System prompt construction and project context loading
  */
 
+import { execSync } from "node:child_process";
+import * as os from "node:os";
 import { getDocsPath, getExamplesPath, getReadmePath } from "../config.js";
 import { buildCursorStyleDefaultSystemPrompt } from "./cursor-style-system-prompt.js";
 import type { ToolDefinition } from "./extensions/types.js";
 import { formatSkillsForPrompt, type Skill } from "./skills.js";
 import { buildXmlToolCallsPromptSection } from "./xml-tool-registration.js";
+
+function getEnvironmentInfo(cwd: string): string {
+	const platform = `${process.platform} ${os.release()}`;
+	const shell = process.env.SHELL ?? process.env.COMSPEC ?? "unknown";
+	let isGitRepo = false;
+	try {
+		execSync("git rev-parse --is-inside-work-tree", { cwd, stdio: "pipe" });
+		isGitRepo = true;
+	} catch {}
+	return [`OS: ${platform}`, `Shell: ${shell}`, `Git repo: ${isGitRepo ? "yes" : "no"}`].join("\n");
+}
 
 export interface BuildSystemPromptOptions {
 	/** Custom system prompt (replaces default). */
@@ -79,9 +92,9 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 		prompt += buildXmlToolCallsPromptSection(xmlToolDefinitions ?? []);
 
-		// Add date and working directory last
 		prompt += `\nCurrent date: ${date}`;
 		prompt += `\nCurrent working directory: ${promptCwd}`;
+		prompt += `\n${getEnvironmentInfo(resolvedCwd)}`;
 
 		return prompt;
 	}
@@ -143,9 +156,9 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions = {}): strin
 
 	prompt += buildXmlToolCallsPromptSection(xmlToolDefinitions ?? []);
 
-	// Add date and working directory last
 	prompt += `\nCurrent date: ${date}`;
 	prompt += `\nCurrent working directory: ${promptCwd}`;
+	prompt += `\n${getEnvironmentInfo(resolvedCwd)}`;
 
 	return prompt;
 }

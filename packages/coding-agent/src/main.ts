@@ -5,6 +5,8 @@
  * createAgentSession() options. The SDK does the heavy lifting.
  */
 
+import { createRequire } from "node:module";
+import * as path from "node:path";
 import { type ImageContent, modelsAreEqual, supportsXhigh } from "@mariozechner/pi-ai";
 import chalk from "chalk";
 import { createInterface } from "readline";
@@ -654,11 +656,15 @@ export async function main(args: string[]) {
 	const authStorage = AuthStorage.create();
 	const modelRegistry = new ModelRegistry(authStorage, getModelsPath());
 
+	const _require = createRequire(import.meta.url);
+	const mcpExtDir = path.dirname(_require.resolve("@yofriadi/pi-mcp/package.json"));
+	const builtinExtensionPaths = [mcpExtDir];
+
 	const resourceLoader = new DefaultResourceLoader({
 		cwd,
 		agentDir,
 		settingsManager,
-		additionalExtensionPaths: firstPass.extensions,
+		additionalExtensionPaths: [...builtinExtensionPaths, ...(firstPass.extensions ?? [])],
 		additionalSkillPaths: firstPass.skills,
 		additionalPromptTemplatePaths: firstPass.promptTemplates,
 		additionalThemePaths: firstPass.themes,

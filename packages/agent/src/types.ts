@@ -35,12 +35,13 @@ export type StreamFn = (
 export type ToolExecutionMode = "sequential" | "parallel";
 
 /**
- * Morph-style XML tool layout: root element + mapping from JSON parameter keys to child tag names.
+ * Cursor-style XML tool layout for `<function_calls>` / `<invoke>` / `<parameter>` format.
+ * When omitted from a tool definition, all JSON schema property keys are used as-is.
  */
 export interface XmlToolCallSpec {
-	/** Root element name (e.g. `edit`). Defaults to snake_case of the tool `name`. */
-	rootTag?: string;
-	parameterTags: Record<string, string>;
+	/** Override mapping from JSON parameter key → displayed `<parameter name="...">` value.
+	 *  Keys not listed here fall through to the JSON property name. */
+	parameterTags?: Record<string, string>;
 }
 
 /** A single tool call content block emitted by an assistant message. */

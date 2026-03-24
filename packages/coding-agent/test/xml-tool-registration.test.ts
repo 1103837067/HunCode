@@ -1,62 +1,44 @@
 import { describe, expect, test } from "vitest";
 import type { ToolDefinition } from "../src/core/extensions/types.js";
-import {
-	buildXmlToolCallsPromptSection,
-	defaultXmlRootTag,
-	parseXmlToolCallsFromText,
-} from "../src/core/xml-tool-registration.js";
-
-describe("defaultXmlRootTag", () => {
-	test("converts camelCase to snake_case", () => {
-		expect(defaultXmlRootTag("editFile")).toBe("edit_file");
-	});
-
-	test("passes through simple names", () => {
-		expect(defaultXmlRootTag("edit")).toBe("edit");
-	});
-});
+import { buildXmlToolCallsPromptSection, parseXmlToolCallsFromText } from "../src/core/xml-tool-registration.js";
 
 describe("buildXmlToolCallsPromptSection", () => {
-	test("returns empty string when no tools have xml", () => {
-		const def = { name: "noop", parameters: {} } as unknown as ToolDefinition;
-		expect(buildXmlToolCallsPromptSection([def])).toBe("");
+	test("returns empty string when no tools", () => {
+		expect(buildXmlToolCallsPromptSection([])).toBe("");
 	});
 
-	test("includes root and parameter tags for tools with xml", () => {
+	test("includes invoke and parameter tags for tools", () => {
 		const def: ToolDefinition = {
 			name: "edit",
 			label: "edit",
 			description: "edit",
 			parameters: {} as never,
 			xml: {
-				rootTag: "edit",
-				parameterTags: { path: "path", oldText: "old_text", newText: "new_text" },
+				parameterTags: { path: "path", oldText: "oldText", newText: "newText" },
 			},
 			async execute() {
 				return { content: [], details: {} };
 			},
 		};
 		const section = buildXmlToolCallsPromptSection([def]);
-		expect(section).toContain("## XML-shaped tool calls");
-		expect(section).toContain("function-calling");
-		expect(section).toContain("<edit>");
-		expect(section).toContain("</edit>");
-		expect(section).toContain("<path>");
-		expect(section).toContain("<old_text>");
-		expect(section).toContain("<new_text>");
+		expect(section).toContain("## Tool invocation format");
+		expect(section).toContain('<invoke name="edit">');
+		expect(section).toContain('<parameter name="path">');
+		expect(section).toContain('<parameter name="oldText">');
+		expect(section).toContain('<parameter name="newText">');
+		expect(section).toContain("</invoke>");
 	});
 });
 
 describe("parseXmlToolCallsFromText", () => {
-	test("parses a Morph-style edit block into JSON parameter keys", () => {
+	test("parses a Cursor-style invoke block into JSON parameter keys", () => {
 		const def: ToolDefinition = {
 			name: "edit",
 			label: "edit",
 			description: "edit",
 			parameters: {} as never,
 			xml: {
-				rootTag: "edit",
-				parameterTags: { path: "path", oldText: "old_text", newText: "new_text" },
+				parameterTags: { path: "path", oldText: "oldText", newText: "newText" },
 			},
 			async execute() {
 				return { content: [], details: {} };
@@ -64,11 +46,13 @@ describe("parseXmlToolCallsFromText", () => {
 		};
 		const text = `
 Here is the change:
-<edit>
-  <path>src/a.ts</path>
-  <old_text>foo</old_text>
-  <new_text>bar</new_text>
-</edit>
+<function_calls>
+<invoke name="edit">
+<parameter name="path">src/a.ts</parameter>
+<parameter name="oldText">foo</parameter>
+<parameter name="newText">bar</parameter>
+</invoke>
+</function_calls>
 `;
 		const calls = parseXmlToolCallsFromText(text, [def]);
 		expect(calls).toHaveLength(1);

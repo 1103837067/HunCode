@@ -180,6 +180,7 @@ export class InteractiveMode {
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+	private completedToolIds = new Set<string>();
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -2270,6 +2271,9 @@ export class InteractiveMode {
 
 					for (const content of this.streamingMessage.content) {
 						if (content.type === "toolCall") {
+							if (this.completedToolIds.has(content.id)) {
+								continue;
+							}
 							if (!this.pendingTools.has(content.id)) {
 								const component = new ToolExecutionComponent(
 									content.name,
@@ -2371,12 +2375,14 @@ export class InteractiveMode {
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
 					this.pendingTools.delete(event.toolCallId);
+					this.completedToolIds.add(event.toolCallId);
 					this.ui.requestRender();
 				}
 				break;
 			}
 
 			case "agent_end":
+				this.completedToolIds.clear();
 				if (this.loadingAnimation) {
 					this.loadingAnimation.stop();
 					this.loadingAnimation = undefined;

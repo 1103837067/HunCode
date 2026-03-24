@@ -3,10 +3,11 @@ import { theme } from "../theme/theme.js";
 
 /**
  * Parse diff line to extract prefix, line number, and content.
- * Format: "+123 content" or "-123 content" or " 123 content" or "     ..."
+ * Format: "+123 content" or "-123 content" or " 123 content".
+ * Collapsed context separators like "   ..." are handled separately.
  */
 function parseDiffLine(line: string): { prefix: string; lineNum: string; content: string } | null {
-	const match = line.match(/^([+-\s])(\s*\d*)\s(.*)$/);
+	const match = line.match(/^([+-\s])(\s*\d+)\s(.*)$/);
 	if (!match) return null;
 	return { prefix: match[1], lineNum: match[2], content: match[3] };
 }

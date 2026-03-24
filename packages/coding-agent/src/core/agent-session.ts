@@ -26,6 +26,7 @@ import type {
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@mariozechner/pi-ai";
 import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@mariozechner/pi-ai";
 import { getDocsPath } from "../config.js";
+import { LspManager } from "../lsp/manager.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
 import { sleep } from "../utils/sleep.js";
@@ -80,6 +81,7 @@ import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import type { BashOperations } from "./tools/bash.js";
 import { createAllToolDefinitions } from "./tools/index.js";
+import { createReadLintsToolDefinition } from "./tools/lsp.js";
 import { createToolDefinitionFromAgentTool, wrapToolDefinition } from "./tools/tool-definition-wrapper.js";
 
 // ============================================================================
@@ -279,6 +281,9 @@ export class AgentSession {
 	// Model registry for API key resolution
 	private _modelRegistry: ModelRegistry;
 
+	// Built-in LSP manager
+	private _lspManager: LspManager | undefined;
+
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
 	private _toolDefinitions: Map<string, ToolDefinitionEntry> = new Map();
@@ -350,29 +355,50 @@ export class AgentSession {
 		});
 
 		this.agent.setAfterToolCall(async ({ toolCall, args, result, isError }) => {
+			let currentContent = result.content;
+			let currentDetails = result.details;
+
 			const runner = this._extensionRunner;
-			if (!runner?.hasHandlers("tool_result")) {
-				return undefined;
+			if (runner?.hasHandlers("tool_result")) {
+				const hookResult = await runner.emitToolResult({
+					type: "tool_result",
+					toolName: toolCall.name,
+					toolCallId: toolCall.id,
+					input: args as Record<string, unknown>,
+					content: currentContent,
+					details: isError ? undefined : currentDetails,
+					isError,
+				});
+
+				if (hookResult && !isError) {
+					if (hookResult.content) currentContent = hookResult.content;
+					if (hookResult.details !== undefined) currentDetails = hookResult.details;
+				}
 			}
 
-			const hookResult = await runner.emitToolResult({
-				type: "tool_result",
-				toolName: toolCall.name,
-				toolCallId: toolCall.id,
-				input: args as Record<string, unknown>,
-				content: result.content,
-				details: isError ? undefined : result.details,
-				isError,
-			});
-
-			if (!hookResult || isError) {
-				return undefined;
+			if (!isError && this._lspManager && (toolCall.name === "write" || toolCall.name === "edit")) {
+				const filePath = (args as Record<string, unknown>)?.path as string | undefined;
+				if (filePath) {
+					try {
+						await this._lspManager.touchFile(filePath);
+						const lspOutput = this._lspManager.formatDiagnosticsForLLM(filePath);
+						if (lspOutput) {
+							return {
+								content: [...currentContent, { type: "text" as const, text: lspOutput }],
+								details: currentDetails,
+							};
+						}
+					} catch {
+						// LSP not available, skip silently
+					}
+				}
 			}
 
-			return {
-				content: hookResult.content,
-				details: hookResult.details,
-			};
+			if (currentContent !== result.content || currentDetails !== result.details) {
+				return { content: currentContent, details: currentDetails };
+			}
+
+			return undefined;
 		});
 	}
 
@@ -672,6 +698,8 @@ export class AgentSession {
 	dispose(): void {
 		this._disconnectFromAgent();
 		this._eventListeners = [];
+		this._lspManager?.shutdown().catch(() => {});
+		this._lspManager = undefined;
 	}
 
 	// =========================================================================
@@ -859,7 +887,7 @@ export class AgentSession {
 		const xmlToolDefinitions: ToolDefinition[] = [];
 		for (const name of validToolNames) {
 			const entry = this._toolDefinitions.get(name);
-			if (entry?.definition.xml) {
+			if (entry) {
 				xmlToolDefinitions.push(entry.definition);
 			}
 		}
@@ -2238,7 +2266,9 @@ export class AgentSession {
 		this._toolPromptSnippets = new Map(
 			Array.from(definitionRegistry.values())
 				.map(({ definition }) => {
-					const snippet = this._normalizePromptSnippet(definition.promptSnippet);
+					const snippet =
+						this._normalizePromptSnippet(definition.promptSnippet) ??
+						this._normalizePromptSnippet(definition.description?.split(".")[0]);
 					return snippet ? ([definition.name, snippet] as const) : undefined;
 				})
 				.filter((entry): entry is readonly [string, string] => entry !== undefined),
@@ -2304,9 +2334,16 @@ export class AgentSession {
 					bash: { commandPrefix: shellCommandPrefix },
 				});
 
+		if (!this._lspManager) {
+			this._lspManager = new LspManager(this._cwd);
+		}
+		const lspManager = this._lspManager;
+		const readLintsDef = createReadLintsToolDefinition(this._cwd, () => lspManager);
+
 		this._baseToolDefinitions = new Map(
 			Object.entries(baseToolDefinitions).map(([name, tool]) => [name, tool as ToolDefinition]),
 		);
+		this._baseToolDefinitions.set(readLintsDef.name, readLintsDef as unknown as ToolDefinition);
 
 		const extensionsResult = this._resourceLoader.getExtensions();
 		if (options.flagValues) {
@@ -2337,7 +2374,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
+			: ["read", "bash", "edit", "write", "read_lints"];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,
@@ -2348,6 +2385,8 @@ export class AgentSession {
 	async reload(): Promise<void> {
 		const previousFlagValues = this._extensionRunner?.getFlagValues();
 		await this._extensionRunner?.emit({ type: "session_shutdown" });
+		await this._lspManager?.shutdown().catch(() => {});
+		this._lspManager = undefined;
 		this.settingsManager.reload();
 		resetApiProviders();
 		await this._resourceLoader.reload();

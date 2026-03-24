@@ -53,6 +53,11 @@ export {
 	lsToolDefinition,
 } from "./ls.js";
 export {
+	createReadLintsTool,
+	createReadLintsToolDefinition,
+	type ReadLintsToolInput,
+} from "./lsp.js";
+export {
 	createReadTool,
 	createReadToolDefinition,
 	type ReadOperations,

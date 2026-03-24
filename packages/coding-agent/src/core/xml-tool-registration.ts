@@ -1,26 +1,44 @@
 /**
- * Morph-style XML tool registration helpers (prompt documentation).
+ * Cursor-style XML tool registration helpers (prompt documentation).
  * Runtime parsing uses `@mariozechner/pi-agent-core` (see `toolInvocation: "xml"`).
  *
- * @see https://docs.morphllm.com/guides/xml-tool-calls
+ * Format: <function_calls><invoke name="..."><parameter name="...">...</parameter></invoke></function_calls>
  */
 
 import {
 	type AgentTool,
-	defaultXmlRootTag as defaultXmlRootTagFromCore,
 	type ParsedXmlToolCall,
 	parseXmlToolCallsFromText as parseXmlToolCallsFromAgentTools,
 } from "@mariozechner/pi-agent-core";
+import type { TSchema } from "@sinclair/typebox";
 import type { ToolDefinition, XmlToolCallSpec } from "./extensions/types.js";
 
 export type { ParsedXmlToolCall };
-export { defaultXmlRootTagFromCore as defaultXmlRootTag };
 
-/** Invert {@link XmlToolCallSpec.parameterTags} for XML → JSON key lookup. */
+/**
+ * Derive a {@link XmlToolCallSpec} from a tool's TypeBox parameters schema.
+ * Each JSON property key maps to itself (identity — Cursor convention).
+ */
+export function deriveXmlSpec(_toolName: string, parameters: TSchema): XmlToolCallSpec {
+	const parameterTags: Record<string, string> = {};
+	if (parameters && typeof parameters === "object" && "properties" in parameters) {
+		for (const key of Object.keys((parameters as Record<string, unknown>).properties as Record<string, unknown>)) {
+			parameterTags[key] = key;
+		}
+	}
+	return { parameterTags };
+}
+
+/** Resolve the effective {@link XmlToolCallSpec} for a tool: explicit `xml` or auto-derived. */
+export function resolveXmlSpec(def: { name: string; parameters: TSchema; xml?: XmlToolCallSpec }): XmlToolCallSpec {
+	return def.xml ?? deriveXmlSpec(def.name, def.parameters);
+}
+
+/** Invert {@link XmlToolCallSpec.parameterTags} for XML parameter name → JSON key lookup. */
 export function invertXmlParameterTags(parameterTags: Record<string, string>): Record<string, string> {
 	const inverted: Record<string, string> = {};
-	for (const [jsonKey, xmlTag] of Object.entries(parameterTags)) {
-		inverted[xmlTag] = jsonKey;
+	for (const [jsonKey, xmlName] of Object.entries(parameterTags)) {
+		inverted[xmlName] = jsonKey;
 	}
 	return inverted;
 }
@@ -31,14 +49,11 @@ function toolDefinitionToAgentToolStub(def: ToolDefinition): AgentTool {
 		label: def.label,
 		description: def.description,
 		parameters: def.parameters,
-		xml: def.xml,
+		xml: resolveXmlSpec(def),
 		execute: async () => ({ content: [], details: {} }),
 	} as AgentTool;
 }
 
-/**
- * Same as agent-core {@link parseXmlToolCallsFromText}, but accepts {@link ToolDefinition} list (e.g. for tests / prompt tooling).
- */
 export function parseXmlToolCallsFromText(text: string, definitions: ToolDefinition[]): ParsedXmlToolCall[] {
 	return parseXmlToolCallsFromAgentTools(
 		text,
@@ -47,56 +62,56 @@ export function parseXmlToolCallsFromText(text: string, definitions: ToolDefinit
 }
 
 /**
- * Build a markdown section documenting registered tools in Morph-style XML (root + child tags).
- * Only includes tools that set {@link ToolDefinition.xml}.
+ * Build a prompt section documenting all registered tools in Cursor-style XML format.
  */
 export function buildXmlToolCallsPromptSection(definitions: ToolDefinition[]): string {
-	const withXml = definitions.filter((d): d is ToolDefinition & { xml: XmlToolCallSpec } => d.xml !== undefined);
-	if (withXml.length === 0) {
+	if (definitions.length === 0) {
 		return "";
 	}
 
-	const blocks = withXml.map((def) => formatXmlToolExample(def));
+	const blocks = definitions.map((def) => formatXmlToolExample(def, resolveXmlSpec(def)));
+
 	return (
-		"\n\n## XML-shaped tool calls (Morph-style)\n\n" +
-		"**Tool invocation:** Use **only** the XML blocks below in your assistant message. Do not use provider function-calling or any other tool channel.\n\n" +
-		"For each tool, parameters match the JSON schema; child tag names are the canonical XML layout " +
-		"(root = tool family, tags = parameters).\n\n" +
+		"\n\n## Tool invocation format\n\n" +
+		"You can invoke tools by writing XML blocks in your assistant message. " +
+		"Wrap all tool calls in a single `<function_calls>` block. Do not use provider function-calling or any other tool channel.\n\n" +
+		"```xml\n" +
+		"<function_calls>\n" +
+		'<invoke name="tool_name">\n' +
+		'<parameter name="param1">value1</parameter>\n' +
+		'<parameter name="param2">value2</parameter>\n' +
+		"</invoke>\n" +
+		"</function_calls>\n" +
+		"```\n\n" +
+		"You may include **multiple** `<invoke>` blocks in a single `<function_calls>` wrapper. " +
+		"Independent tool calls should be batched together for better performance. " +
+		"Each tool is executed as soon as its `</invoke>` tag is received.\n\n" +
 		blocks.join("\n\n")
 	);
 }
 
-function formatXmlToolExample(def: ToolDefinition & { xml: XmlToolCallSpec }): string {
-	const spec = def.xml;
-	const root = spec.rootTag ?? defaultXmlRootTagFromCore(def.name);
-	const lines: string[] = [`### ${def.name} (\`<${root}>\`)`, "", "```xml", `<${root}>`];
+function formatXmlToolExample(def: ToolDefinition, spec: XmlToolCallSpec): string {
+	const tags = spec.parameterTags ?? {};
+	const lines: string[] = [`### ${def.name}`, "", "```xml", `<invoke name="${def.name}">`];
 
-	const sortedKeys = Object.keys(spec.parameterTags).sort((a, b) => a.localeCompare(b));
-	for (const paramKey of sortedKeys) {
-		const tag = spec.parameterTags[paramKey];
-		if (!tag) {
-			continue;
-		}
-		lines.push(`  <${tag}>…</${tag}>  <!-- ${paramKey} -->`);
+	const sortedKeys = Object.keys(tags).sort((a, b) => a.localeCompare(b));
+	for (const jsonKey of sortedKeys) {
+		const xmlName = tags[jsonKey];
+		if (!xmlName) continue;
+		const comment = xmlName !== jsonKey ? `  <!-- ${jsonKey} -->` : "";
+		lines.push(`  <parameter name="${xmlName}">…</parameter>${comment}`);
 	}
-	lines.push(`</${root}>`);
+	lines.push("</invoke>");
 	lines.push("```");
 	return lines.join("\n");
 }
 
 function valueToString(value: unknown): string {
-	if (typeof value === "string") {
-		return value;
-	}
-	if (value === null || value === undefined) {
-		return "";
-	}
+	if (typeof value === "string") return value;
+	if (value === null || value === undefined) return "";
 	return JSON.stringify(value);
 }
 
-/**
- * Map one XML block's inner object (flat child tags) to JSON parameter keys using `spec.parameterTags`.
- */
 export function xmlInnerObjectToArguments(
 	xmlTagToJsonKey: Record<string, string>,
 	inner: Record<string, unknown>,
@@ -104,9 +119,7 @@ export function xmlInnerObjectToArguments(
 	const out: Record<string, string> = {};
 	for (const [xmlTag, value] of Object.entries(inner)) {
 		const jsonKey = xmlTagToJsonKey[xmlTag];
-		if (!jsonKey) {
-			continue;
-		}
+		if (!jsonKey) continue;
 		out[jsonKey] = valueToString(value);
 	}
 	return out;

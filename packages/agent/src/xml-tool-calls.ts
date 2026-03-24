@@ -1,5 +1,10 @@
 /**
- * Morph-style XML tool invocation (no provider-native function calling).
+ * Cursor-style XML tool invocation:
+ *   <function_calls>
+ *     <invoke name="tool_name">
+ *       <parameter name="key">value</parameter>
+ *     </invoke>
+ *   </function_calls>
  */
 
 import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai";
@@ -10,51 +15,70 @@ export interface ParsedXmlToolCall {
 	arguments: Record<string, string>;
 }
 
-export function defaultXmlRootTag(toolName: string): string {
-	return toolName
-		.replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-		.replace(/-/g, "_")
-		.toLowerCase();
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function decodeXmlEntities(text: string): string {
+	return text
+		.replace(/&amp;/g, "&")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'");
 }
 
-function escapeRegExp(s: string): string {
-	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Build a map from XML parameter name → JSON key for a given tool. */
+function buildParamNameToJsonKey(tool: AgentTool): Map<string, string> {
+	const map = new Map<string, string>();
+	const tags = tool.xml?.parameterTags;
+	if (tags) {
+		for (const [jsonKey, xmlName] of Object.entries(tags)) {
+			map.set(xmlName, jsonKey);
+		}
+	}
+	return map;
 }
 
-function extractChildTag(inner: string, tag: string): string | undefined {
-	const re = new RegExp(`<${escapeRegExp(tag)}(?:\\s[^>]*)?>([\\s\\S]*?)</${escapeRegExp(tag)}>`);
-	const m = inner.match(re);
-	return m?.[1]?.trim();
+/** Get the XML parameter name for a JSON key. Falls through to key itself when no override. */
+function jsonKeyToParamName(tool: AgentTool, jsonKey: string): string {
+	return tool.xml?.parameterTags?.[jsonKey] ?? jsonKey;
 }
+
+// ---------------------------------------------------------------------------
+// Parsing: Cursor-style <function_calls> / <invoke> / <parameter>
+// ---------------------------------------------------------------------------
+
+const FUNCTION_CALLS_RE = /<function_calls>([\s\S]*?)<\/function_calls>/g;
+const INVOKE_RE = /<invoke\s+name="([^"]+)">([\s\S]*?)<\/invoke>/g;
+const PARAMETER_RE = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
 
 /**
- * Parse Morph-style XML blocks from assistant text into tool name + string parameter map.
- * Only tools that declare {@link AgentTool.xml} participate.
+ * Parse all complete `<invoke>` blocks from text (within `<function_calls>` wrappers).
+ * Returns tool name + flat string parameter map (JSON keys).
  */
 export function parseXmlToolCallsFromText(text: string, tools: AgentTool[]): ParsedXmlToolCall[] {
 	const results: ParsedXmlToolCall[] = [];
+	const toolsByName = new Map(tools.map((t) => [t.name, t]));
 
-	for (const tool of tools) {
-		const spec = tool.xml;
-		if (!spec) {
-			continue;
-		}
-		const root = spec.rootTag ?? defaultXmlRootTag(tool.name);
-		const re = new RegExp(`<${escapeRegExp(root)}(?:\\s[^>]*)?>[\\s\\S]*?<\\/${escapeRegExp(root)}>`, "g");
-		for (const m of text.matchAll(re)) {
-			const full = m[0];
-			const innerOpen = new RegExp(`^<${escapeRegExp(root)}(?:\\s[^>]*)?>([\\s\\S]*)</${escapeRegExp(root)}>$`);
-			const innerM = full.match(innerOpen);
-			const inner = innerM?.[1] ?? "";
+	for (const fcMatch of text.matchAll(FUNCTION_CALLS_RE)) {
+		const fcInner = fcMatch[1];
+		for (const invMatch of fcInner.matchAll(INVOKE_RE)) {
+			const toolName = invMatch[1];
+			const invokeInner = invMatch[2];
+			const tool = toolsByName.get(toolName);
+			if (!tool) continue;
+
+			const reverseMap = buildParamNameToJsonKey(tool);
 			const args: Record<string, string> = {};
-			for (const [jsonKey, xmlTag] of Object.entries(spec.parameterTags)) {
-				const v = extractChildTag(inner, xmlTag);
-				if (v !== undefined) {
-					args[jsonKey] = v;
-				}
+			for (const pMatch of invokeInner.matchAll(PARAMETER_RE)) {
+				const xmlParamName = pMatch[1];
+				const value = decodeXmlEntities(pMatch[2].trim());
+				const jsonKey = reverseMap.get(xmlParamName) ?? xmlParamName;
+				args[jsonKey] = value;
 			}
 			if (Object.keys(args).length > 0) {
-				results.push({ name: tool.name, arguments: args });
+				results.push({ name: toolName, arguments: args });
 			}
 		}
 	}
@@ -62,33 +86,205 @@ export function parseXmlToolCallsFromText(text: string, tools: AgentTool[]): Par
 	return results;
 }
 
+/**
+ * Parse complete `<invoke>` blocks even without outer `</function_calls>` closing tag.
+ * Used during streaming to detect tools ready for early execution.
+ */
+export function parseCompletedInvokeBlocks(text: string, tools: AgentTool[]): ParsedXmlToolCall[] {
+	const results: ParsedXmlToolCall[] = [];
+	const toolsByName = new Map(tools.map((t) => [t.name, t]));
+
+	const fcOpenIdx = text.indexOf("<function_calls>");
+	if (fcOpenIdx === -1) return results;
+
+	const afterOpen = text.slice(fcOpenIdx + "<function_calls>".length);
+
+	for (const invMatch of afterOpen.matchAll(INVOKE_RE)) {
+		const toolName = invMatch[1];
+		const invokeInner = invMatch[2];
+		const tool = toolsByName.get(toolName);
+		if (!tool) continue;
+
+		const reverseMap = buildParamNameToJsonKey(tool);
+		const args: Record<string, string> = {};
+		for (const pMatch of invokeInner.matchAll(PARAMETER_RE)) {
+			const xmlParamName = pMatch[1];
+			const value = decodeXmlEntities(pMatch[2].trim());
+			const jsonKey = reverseMap.get(xmlParamName) ?? xmlParamName;
+			args[jsonKey] = value;
+		}
+		if (Object.keys(args).length > 0) {
+			results.push({ name: toolName, arguments: args });
+		}
+	}
+
+	return results;
+}
+
+// ---------------------------------------------------------------------------
+// Scalar coercion
+// ---------------------------------------------------------------------------
+
 function parseXmlScalar(s: string): unknown {
 	const t = s.trim();
-	if (t === "true") {
-		return true;
-	}
-	if (t === "false") {
-		return false;
-	}
-	if (/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(t)) {
-		return Number(t);
-	}
+	if (t === "true") return true;
+	if (t === "false") return false;
+	if (/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(t)) return Number(t);
 	return s;
 }
 
-/**
- * Coerce flat string map from XML into JSON-like values for TypeBox validation.
- */
 export function coerceXmlStringArgs(flat: Record<string, string>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
 	for (const [key, val] of Object.entries(flat)) {
-		if (val.trim() === "") {
-			continue;
-		}
+		if (val.trim() === "") continue;
 		out[key] = parseXmlScalar(val);
 	}
 	return out;
 }
+
+// ---------------------------------------------------------------------------
+// Synthetic tool call IDs
+// ---------------------------------------------------------------------------
+
+export function syntheticXmlToolCallId(index: number): string {
+	return `xml-synthetic-${index}`;
+}
+
+// ---------------------------------------------------------------------------
+// Text stripping (hide XML from UI display)
+// ---------------------------------------------------------------------------
+
+/**
+ * Find the character position of `<function_calls` (the outer wrapper start).
+ * Returns `text.length` when no tag is found.
+ */
+function findFunctionCallsStart(text: string): number {
+	const idx = text.indexOf("<function_calls");
+	return idx === -1 ? text.length : idx;
+}
+
+/**
+ * Strip complete `<function_calls>` blocks from text.
+ * Everything from the first `<function_calls` onward is dropped.
+ */
+export function stripParsedXmlToolBlocksFromText(text: string, _tools: AgentTool[]): string {
+	const pos = findFunctionCallsStart(text);
+	if (pos >= text.length) return text;
+	return text
+		.slice(0, pos)
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+/**
+ * Trailing partial tag prefixes that might flash during streaming.
+ */
+const STREAMING_TAG_PREFIXES = ["<function_calls", "<invoke", "<parameter"];
+
+function stripTrailingPartialTags(text: string): string {
+	for (const prefix of STREAMING_TAG_PREFIXES) {
+		for (let len = prefix.length; len >= 1; len--) {
+			const partial = prefix.slice(0, len);
+			if (text.endsWith(partial)) {
+				return text.slice(0, -partial.length).trimEnd();
+			}
+		}
+	}
+	return text;
+}
+
+/**
+ * Strip XML tool blocks from streaming text.
+ * Truncates at `<function_calls` if found, otherwise strips trailing partial tag prefixes.
+ */
+export function stripStreamingXmlToolBlocksFromText(text: string, _tools: AgentTool[]): string {
+	const pos = findFunctionCallsStart(text);
+	if (pos < text.length) {
+		return text
+			.slice(0, pos)
+			.replace(/\n{3,}/g, "\n\n")
+			.trim();
+	}
+	return stripTrailingPartialTags(text)
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Streaming: incomplete invoke detection for UI preview
+// ---------------------------------------------------------------------------
+
+function extractIncompleteInvoke(
+	text: string,
+	tools: AgentTool[],
+): { tool: AgentTool; params: Record<string, string> } | null {
+	const fcOpenIdx = text.indexOf("<function_calls>");
+	if (fcOpenIdx === -1) return null;
+
+	const afterOpen = text.slice(fcOpenIdx + "<function_calls>".length);
+	const stripped = afterOpen.replace(/<invoke\s+name="[^"]+">[\s\S]*?<\/invoke>/g, "");
+
+	const partialInvoke = stripped.match(/<invoke\s+name="([^"]+)">([\s\S]*)$/);
+	if (!partialInvoke) return null;
+
+	const toolName = partialInvoke[1];
+	const invokeInner = partialInvoke[2];
+	const tool = tools.find((t) => t.name === toolName);
+	if (!tool) return null;
+
+	const reverseMap = buildParamNameToJsonKey(tool);
+	const params: Record<string, string> = {};
+
+	let remaining = invokeInner;
+	for (const pMatch of invokeInner.matchAll(PARAMETER_RE)) {
+		const xmlParamName = pMatch[1];
+		const value = decodeXmlEntities(pMatch[2].trim());
+		const jsonKey = reverseMap.get(xmlParamName) ?? xmlParamName;
+		params[jsonKey] = value;
+		remaining = remaining.slice(remaining.indexOf(pMatch[0]) + pMatch[0].length);
+	}
+
+	const unclosedParam = remaining.match(/<parameter\s+name="([^"]+)">([\s\S]*)$/);
+	if (unclosedParam) {
+		const xmlParamName = unclosedParam[1];
+		const value = decodeXmlEntities(unclosedParam[2].trim());
+		const jsonKey = reverseMap.get(xmlParamName) ?? xmlParamName;
+		params[jsonKey] = value;
+	}
+
+	return { tool, params };
+}
+
+function buildSyntheticXmlToolCallsStreaming(text: string, tools: AgentTool[]): ToolCall[] {
+	const complete = parseCompletedInvokeBlocks(text, tools);
+	const incomplete = extractIncompleteInvoke(text, tools);
+	const synthetic: ToolCall[] = [];
+	let idx = 0;
+
+	for (const p of complete) {
+		synthetic.push({
+			type: "toolCall",
+			id: syntheticXmlToolCallId(idx++),
+			name: p.name,
+			arguments: coerceXmlStringArgs(p.arguments),
+		});
+	}
+
+	if (incomplete) {
+		synthetic.push({
+			type: "toolCall",
+			id: syntheticXmlToolCallId(idx++),
+			name: incomplete.tool.name,
+			arguments: coerceXmlStringArgs(incomplete.params),
+		});
+	}
+
+	return synthetic;
+}
+
+// ---------------------------------------------------------------------------
+// Assistant message content rebuilding
+// ---------------------------------------------------------------------------
 
 function extractAssistantText(message: AssistantMessage): string {
 	return message.content
@@ -97,182 +293,6 @@ function extractAssistantText(message: AssistantMessage): string {
 		.join("\n");
 }
 
-/** Deterministic synthetic tool call ids so streaming UI and final augment stay aligned. */
-export function syntheticXmlToolCallId(index: number): string {
-	return `xml-synthetic-${index}`;
-}
-
-/**
- * Remove complete Morph-style XML blocks (no trailing trim collapse).
- */
-function stripCompleteXmlBlocksRaw(text: string, tools: AgentTool[]): string {
-	let out = text;
-	for (const tool of tools) {
-		const spec = tool.xml;
-		if (!spec) {
-			continue;
-		}
-		const root = spec.rootTag ?? defaultXmlRootTag(tool.name);
-		const re = new RegExp(`<${escapeRegExp(root)}(?:\\s[^>]*)?>[\\s\\S]*?<\\/${escapeRegExp(root)}>`, "g");
-		out = out.replace(re, "");
-	}
-	return out;
-}
-
-/**
- * Remove complete Morph-style XML tool blocks from assistant text so the TUI/Web do not render raw tags
- * (tool execution still uses {@link parseXmlToolCallsFromText} on the original text before stripping).
- */
-export function stripParsedXmlToolBlocksFromText(text: string, tools: AgentTool[]): string {
-	return stripCompleteXmlBlocksRaw(text, tools)
-		.replace(/\n{3,}/g, "\n\n")
-		.trim();
-}
-
-/**
- * Strip trailing partial open tags like `<`, `<w`, … before `<root>` is complete (avoids raw `<` flashes while streaming).
- */
-function stripTrailingXmlPrefixes(text: string, tools: AgentTool[]): string {
-	let best: string | null = null;
-	for (const tool of tools) {
-		const spec = tool.xml;
-		if (!spec) {
-			continue;
-		}
-		const root = spec.rootTag ?? defaultXmlRootTag(tool.name);
-		const openStart = `<${root}`;
-		for (let len = openStart.length; len >= 1; len--) {
-			const prefix = openStart.slice(0, len);
-			if (text.endsWith(prefix) && prefix.length > (best?.length ?? 0)) {
-				best = prefix;
-			}
-		}
-	}
-	if (best) {
-		return text.slice(0, -best.length).trimEnd();
-	}
-	return text;
-}
-
-/**
- * Remove complete blocks, then any in-flight XML tool block (open without matching close), then trailing `<root` prefixes.
- * Use while the assistant message is still streaming so the TUI never shows raw Morph XML.
- */
-export function stripStreamingXmlToolBlocksFromText(text: string, tools: AgentTool[]): string {
-	let out = stripCompleteXmlBlocksRaw(text, tools);
-	let earliestCut = out.length;
-	for (const tool of tools) {
-		const spec = tool.xml;
-		if (!spec) {
-			continue;
-		}
-		const root = spec.rootTag ?? defaultXmlRootTag(tool.name);
-		const openRe = new RegExp(`<${escapeRegExp(root)}(?:\\s[^>]*)?>`, "g");
-		let m: RegExpExecArray | null = openRe.exec(out);
-		while (m !== null) {
-			const openEnd = m.index + m[0].length;
-			const rest = out.slice(openEnd);
-			if (rest.indexOf(`</${root}>`) === -1) {
-				earliestCut = Math.min(earliestCut, m.index);
-			}
-			m = openRe.exec(out);
-		}
-		const partialOpen = out.match(new RegExp(`(<${escapeRegExp(root)}(?:\\s[^>]*)?)$`));
-		if (partialOpen) {
-			const idx = partialOpen.index ?? 0;
-			earliestCut = Math.min(earliestCut, idx);
-		}
-	}
-	if (earliestCut < out.length) {
-		out = out.slice(0, earliestCut).trimEnd();
-	}
-	out = stripTrailingXmlPrefixes(out, tools);
-	return out.replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function extractPartialXmlArguments(inner: string, spec: NonNullable<AgentTool["xml"]>): Record<string, string> {
-	const args: Record<string, string> = {};
-	for (const [jsonKey, xmlTag] of Object.entries(spec.parameterTags)) {
-		const closed = extractChildTag(inner, xmlTag);
-		if (closed !== undefined) {
-			args[jsonKey] = closed;
-			continue;
-		}
-		const unclosed = new RegExp(`<${escapeRegExp(xmlTag)}(?:\\s[^>]*)?>([\\s\\S]*)$`);
-		const um = inner.match(unclosed);
-		if (um) {
-			args[jsonKey] = um[1].trim();
-		}
-	}
-	return args;
-}
-
-function extractIncompleteXmlInner(text: string, tools: AgentTool[]): { tool: AgentTool; inner: string } | null {
-	const remnant = stripCompleteXmlBlocksRaw(text, tools);
-	let best: { index: number; tool: AgentTool; inner: string } | null = null;
-	for (const tool of tools) {
-		const spec = tool.xml;
-		if (!spec) {
-			continue;
-		}
-		const root = spec.rootTag ?? defaultXmlRootTag(tool.name);
-		const openRe = new RegExp(`<${escapeRegExp(root)}(?:\\s[^>]*)?>`, "g");
-		let m: RegExpExecArray | null = openRe.exec(remnant);
-		while (m !== null) {
-			const openEnd = m.index + m[0].length;
-			const rest = remnant.slice(openEnd);
-			if (rest.indexOf(`</${root}>`) === -1) {
-				const cand = { index: m.index, tool, inner: remnant.slice(openEnd) };
-				if (!best || cand.index < best.index) {
-					best = cand;
-				}
-			}
-			m = openRe.exec(remnant);
-		}
-		const partialOpen = remnant.match(new RegExp(`(<${escapeRegExp(root)}(?:\\s[^>]*)?)$`));
-		if (partialOpen) {
-			const idx = partialOpen.index ?? 0;
-			const cand = { index: idx, tool, inner: "" };
-			if (!best || cand.index < best.index) {
-				best = cand;
-			}
-		}
-	}
-	return best ? { tool: best.tool, inner: best.inner } : null;
-}
-
-function buildSyntheticXmlToolCallsStreaming(text: string, tools: AgentTool[]): ToolCall[] {
-	const complete = parseXmlToolCallsFromText(text, tools);
-	const incomplete = extractIncompleteXmlInner(text, tools);
-	const synthetic: ToolCall[] = [];
-	let idx = 0;
-	for (const p of complete) {
-		const tool = tools.find((t) => t.name === p.name);
-		if (!tool?.xml) {
-			continue;
-		}
-		synthetic.push({
-			type: "toolCall",
-			id: syntheticXmlToolCallId(idx++),
-			name: p.name,
-			arguments: coerceXmlStringArgs(p.arguments),
-		});
-	}
-	if (incomplete?.tool.xml) {
-		const partialArgs = extractPartialXmlArguments(incomplete.inner, incomplete.tool.xml);
-		synthetic.push({
-			type: "toolCall",
-			id: syntheticXmlToolCallId(idx++),
-			name: incomplete.tool.name,
-			arguments: coerceXmlStringArgs(partialArgs),
-		});
-	}
-	return synthetic;
-}
-
-/**
- * Collapse all `text` parts into one block with `strippedText`, preserving non-text, non-toolCall order.
- */
 function rebuildContentWithStrippedAssistantText(
 	message: AssistantMessage,
 	strippedText: string,
@@ -295,10 +315,10 @@ function rebuildContentWithStrippedAssistantText(
 	return out;
 }
 
-/**
- * During XML tool streaming: strip in-flight XML from assistant text and append synthetic toolCall rows
- * (same ids as {@link augmentAssistantMessageWithXmlToolCalls} on the final message when the stream is complete).
- */
+// ---------------------------------------------------------------------------
+// Public augment functions (streaming + final)
+// ---------------------------------------------------------------------------
+
 export function augmentAssistantMessageForXmlStreaming(
 	message: AssistantMessage,
 	tools: AgentTool[],
@@ -313,10 +333,6 @@ export function augmentAssistantMessageForXmlStreaming(
 	};
 }
 
-/**
- * Strip native toolCall blocks, parse XML from text, append synthetic toolCall blocks.
- * Strips matched XML from assistant text so UI shows tool cards + prose only, not raw tags.
- */
 export function augmentAssistantMessageWithXmlToolCalls(
 	message: AssistantMessage,
 	tools: AgentTool[],
@@ -329,9 +345,7 @@ export function augmentAssistantMessageWithXmlToolCalls(
 	const hadNativeToolCalls = withoutNative.length !== message.content.length;
 
 	if (parsed.length === 0) {
-		if (!hadNativeToolCalls && strippedText === text) {
-			return message;
-		}
+		if (!hadNativeToolCalls && strippedText === text) return message;
 		if (strippedText === text) {
 			return hadNativeToolCalls ? { ...message, content: withoutNative } : message;
 		}
@@ -341,10 +355,6 @@ export function augmentAssistantMessageWithXmlToolCalls(
 	const synthetic: ToolCall[] = [];
 	let i = 0;
 	for (const p of parsed) {
-		const tool = tools.find((t) => t.name === p.name);
-		if (!tool?.xml) {
-			continue;
-		}
 		synthetic.push({
 			type: "toolCall",
 			id: syntheticXmlToolCallId(i++),
@@ -359,3 +369,6 @@ export function augmentAssistantMessageWithXmlToolCalls(
 		content: [...baseContent, ...synthetic],
 	};
 }
+
+// Re-export helpers used externally
+export { jsonKeyToParamName, buildParamNameToJsonKey };

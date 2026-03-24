@@ -91,6 +91,22 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("README.md");
 	});
 
+	test("shows compact pending read summary without body content", () => {
+		const component = new ToolExecutionComponent(
+			"read",
+			"tool-3b",
+			{ path: "README.md" },
+			{},
+			createReadToolDefinition(process.cwd()),
+			createFakeTui(),
+		);
+		const rendered = stripAnsi(component.render(120).join("\n"));
+		expect(rendered).toContain("read");
+		expect(rendered).toContain("README.md");
+		expect(rendered).toContain("reading…");
+		expect(rendered).not.toContain("line hidden");
+	});
+
 	test("bash execute emits an initial empty partial update before output arrives", async () => {
 		const updates: Array<{ content: Array<{ type: string; text?: string }>; details?: unknown }> = [];
 		const operations: BashOperations = {
@@ -125,6 +141,33 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered.match(/\bread\b/g)?.length ?? 0).toBe(1);
 	});
 
+	test("shows compact collapsed read result and reveals content when expanded", () => {
+		const component = new ToolExecutionComponent(
+			"read",
+			"tool-4a",
+			{ path: "README.md" },
+			{},
+			createReadToolDefinition(process.cwd()),
+			createFakeTui(),
+		);
+		component.updateResult(
+			{ content: [{ type: "text", text: "one\ntwo\nthree" }], details: undefined, isError: false },
+			false,
+		);
+
+		const collapsed = stripAnsi(component.render(120).join("\n"));
+		expect(collapsed).toContain("read");
+		expect(collapsed).toContain("3 lines hidden");
+		expect(collapsed).not.toContain("one");
+		expect(collapsed).not.toContain("two");
+
+		component.setExpanded(true);
+		const expanded = stripAnsi(component.render(120).join("\n"));
+		expect(expanded).toContain("one");
+		expect(expanded).toContain("two");
+		expect(expanded).toContain("three");
+	});
+
 	test("inherits missing built-in result renderer slot from the built-in tool", () => {
 		const overrideDefinition: ToolDefinition = {
 			...createBaseToolDefinition("read"),
@@ -142,7 +185,8 @@ describe("ToolExecutionComponent parity", () => {
 		component.updateResult({ content: [{ type: "text", text: "hello" }], details: undefined, isError: false }, false);
 		const rendered = stripAnsi(component.render(120).join("\n"));
 		expect(rendered).toContain("override call");
-		expect(rendered).toContain("hello");
+		expect(rendered).toContain("1 line hidden");
+		expect(rendered).not.toContain("hello");
 	});
 
 	test("inherits missing built-in call renderer slot from the built-in tool", () => {
@@ -254,6 +298,7 @@ describe("ToolExecutionComponent parity", () => {
 			{ content: [{ type: "text", text: "one\ntwo\n" }], details: undefined, isError: false },
 			false,
 		);
+		component.setExpanded(true);
 		const rendered = stripAnsi(component.render(120).join("\n"));
 		expect(rendered).toContain("one");
 		expect(rendered).toContain("two");

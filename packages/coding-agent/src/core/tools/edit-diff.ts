@@ -128,7 +128,7 @@ export function stripBom(content: string): { bom: string; text: string } {
 export function generateDiffString(
 	oldContent: string,
 	newContent: string,
-	contextLines = 4,
+	contextLines = 3,
 ): { diff: string; firstChangedLine: number | undefined } {
 	const parts = Diff.diffLines(oldContent, newContent);
 	const output: string[] = [];

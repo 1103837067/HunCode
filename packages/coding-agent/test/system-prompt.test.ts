@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import type { ToolDefinition } from "../src/core/extensions/types.js";
 import { buildSystemPrompt } from "../src/core/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
@@ -93,33 +92,6 @@ describe("buildSystemPrompt", () => {
 			});
 
 			expect(prompt.match(/- Use dynamic_tool for summaries\./g)).toHaveLength(1);
-		});
-	});
-
-	describe("xml tool definitions", () => {
-		test("appends Cursor-style XML section when xmlToolDefinitions provided", () => {
-			const xmlTool: ToolDefinition = {
-				name: "edit",
-				label: "edit",
-				description: "d",
-				parameters: {} as never,
-				xml: {
-					parameterTags: { path: "path", oldText: "oldText", newText: "newText" },
-				},
-				async execute() {
-					return { content: [], details: {} };
-				},
-			};
-			const prompt = buildSystemPrompt({
-				toolSnippets: { read: "Read", edit: "Edit" },
-				selectedTools: ["read", "edit"],
-				contextFiles: [],
-				skills: [],
-				xmlToolDefinitions: [xmlTool],
-			});
-			expect(prompt).toContain("## Tool invocation format");
-			expect(prompt).toContain("function-calling");
-			expect(prompt).toContain('<invoke name="edit">');
 		});
 	});
 });

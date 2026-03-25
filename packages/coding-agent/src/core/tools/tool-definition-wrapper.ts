@@ -1,6 +1,5 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.js";
-import { resolveXmlSpec } from "../xml-tool-registration.js";
 
 /** Wrap a ToolDefinition into an AgentTool for the core runtime. */
 export function wrapToolDefinition<TDetails = unknown>(
@@ -12,7 +11,6 @@ export function wrapToolDefinition<TDetails = unknown>(
 		label: definition.label,
 		description: definition.description,
 		parameters: definition.parameters,
-		xml: resolveXmlSpec(definition),
 		execute: (toolCallId, params, signal, onUpdate) =>
 			definition.execute(toolCallId, params, signal, onUpdate, ctxFactory?.() as ExtensionContext),
 	};
@@ -38,7 +36,6 @@ export function createToolDefinitionFromAgentTool(tool: AgentTool<any>): ToolDef
 		label: tool.label,
 		description: tool.description,
 		parameters: tool.parameters as any,
-		xml: resolveXmlSpec({ name: tool.name, parameters: tool.parameters, xml: tool.xml }),
 		execute: async (toolCallId, params, signal, onUpdate) => tool.execute(toolCallId, params, signal, onUpdate),
 	};
 }

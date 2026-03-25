@@ -153,7 +153,6 @@ export type {
 	WidgetPlacement,
 	WriteToolCallEvent,
 	WriteToolResultEvent,
-	XmlToolCallSpec,
 } from "./types.js";
 // Type guards
 export {

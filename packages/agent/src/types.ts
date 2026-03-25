@@ -34,16 +34,6 @@ export type StreamFn = (
  */
 export type ToolExecutionMode = "sequential" | "parallel";
 
-/**
- * Cursor-style XML tool layout for `<function_calls>` / `<invoke>` / `<parameter>` format.
- * When omitted from a tool definition, all JSON schema property keys are used as-is.
- */
-export interface XmlToolCallSpec {
-	/** Override mapping from JSON parameter key → displayed `<parameter name="...">` value.
-	 *  Keys not listed here fall through to the JSON property name. */
-	parameterTags?: Record<string, string>;
-}
-
 /** A single tool call content block emitted by an assistant message. */
 export type AgentToolCall = Extract<AssistantMessage["content"][number], { type: "toolCall" }>;
 
@@ -107,15 +97,6 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
 	/**
-	 * How tools are invoked toward the LLM:
-	 * - `"native"`: provider function-calling (tools JSON schema in the API request).
-	 * - `"xml"`: send **no** tools to the API; after each assistant reply, parse Morph-style XML from assistant text and execute tools locally.
-	 *
-	 * Default: `"xml"` (XML-only; no function calling).
-	 */
-	toolInvocation?: "native" | "xml";
-
-	/**
 	 * Converts AgentMessage[] to LLM-compatible Message[] before each LLM call.
 	 *
 	 * Each AgentMessage must be converted to a UserMessage, AssistantMessage, or ToolResultMessage
@@ -124,22 +105,6 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Contract: must not throw or reject. Return a safe fallback value instead.
 	 * Throwing interrupts the low-level agent loop without producing a normal event sequence.
-	 *
-	 * @example
-	 * ```typescript
-	 * convertToLlm: (messages) => messages.flatMap(m => {
-	 *   if (m.role === "custom") {
-	 *     // Convert custom message to user message
-	 *     return [{ role: "user", content: m.content, timestamp: m.timestamp }];
-	 *   }
-	 *   if (m.role === "notification") {
-	 *     // Filter out UI-only messages
-	 *     return [];
-	 *   }
-	 *   // Pass through standard LLM messages
-	 *   return [m];
-	 * })
-	 * ```
 	 */
 	convertToLlm: (messages: AgentMessage[]) => Message[] | Promise<Message[]>;
 
@@ -152,16 +117,6 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 *
 	 * Contract: must not throw or reject. Return the original messages or another
 	 * safe fallback value instead.
-	 *
-	 * @example
-	 * ```typescript
-	 * transformContext: async (messages) => {
-	 *   if (estimateTokens(messages) > MAX_TOKENS) {
-	 *     return pruneOldMessages(messages);
-	 *   }
-	 *   return messages;
-	 * }
-	 * ```
 	 */
 	transformContext?: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
 
@@ -241,16 +196,6 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 /**
  * Extensible interface for custom app messages.
  * Apps can extend via declaration merging:
- *
- * @example
- * ```typescript
- * declare module "@mariozechner/agent" {
- *   interface CustomAgentMessages {
- *     artifact: ArtifactMessage;
- *     notification: NotificationMessage;
- *   }
- * }
- * ```
  */
 export interface CustomAgentMessages {
 	// Empty by default - apps extend via declaration merging
@@ -271,7 +216,7 @@ export interface AgentState {
 	model: Model<any>;
 	thinkingLevel: ThinkingLevel;
 	tools: AgentTool<any>[];
-	messages: AgentMessage[]; // Can include attachments + custom message types
+	messages: AgentMessage[];
 	isStreaming: boolean;
 	streamMessage: AgentMessage | null;
 	pendingToolCalls: Set<string>;
@@ -279,21 +224,14 @@ export interface AgentState {
 }
 
 export interface AgentToolResult<T> {
-	// Content blocks supporting text and images
 	content: (TextContent | ImageContent)[];
-	// Details to be displayed in a UI or logged
 	details: T;
 }
 
-// Callback for streaming tool execution updates
 export type AgentToolUpdateCallback<T = any> = (partialResult: AgentToolResult<T>) => void;
 
-// AgentTool extends Tool but adds the execute function
 export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any> extends Tool<TParameters> {
-	// A human-readable label for the tool to be displayed in UI
 	label: string;
-	/** When using {@link AgentLoopConfig.toolInvocation} `"xml"`, required for tools that can be invoked via XML. */
-	xml?: XmlToolCallSpec;
 	execute: (
 		toolCallId: string,
 		params: Static<TParameters>,
@@ -302,30 +240,20 @@ export interface AgentTool<TParameters extends TSchema = TSchema, TDetails = any
 	) => Promise<AgentToolResult<TDetails>>;
 }
 
-// AgentContext is like Context but uses AgentTool
 export interface AgentContext {
 	systemPrompt: string;
 	messages: AgentMessage[];
 	tools?: AgentTool<any>[];
 }
 
-/**
- * Events emitted by the Agent for UI updates.
- * These events provide fine-grained lifecycle information for messages, turns, and tool executions.
- */
 export type AgentEvent =
-	// Agent lifecycle
 	| { type: "agent_start" }
 	| { type: "agent_end"; messages: AgentMessage[] }
-	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }
-	// Message lifecycle - emitted for user, assistant, and toolResult messages
 	| { type: "message_start"; message: AgentMessage }
-	// Only emitted for assistant messages during streaming
 	| { type: "message_update"; message: AgentMessage; assistantMessageEvent: AssistantMessageEvent }
 	| { type: "message_end"; message: AgentMessage }
-	// Tool execution lifecycle
 	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
 	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
 	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean };

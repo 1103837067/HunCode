@@ -59,10 +59,3 @@ export {
 	type TurnStartEvent,
 } from "./extensions/index.js";
 export { createSyntheticSourceInfo } from "./source-info.js";
-export {
-	buildXmlToolCallsPromptSection,
-	invertXmlParameterTags,
-	type ParsedXmlToolCall,
-	parseXmlToolCallsFromText,
-	xmlInnerObjectToArguments,
-} from "./xml-tool-registration.js";

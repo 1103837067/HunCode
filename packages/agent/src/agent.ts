@@ -106,11 +106,6 @@ export interface AgentOptions {
 	/** Tool execution mode. Default: "parallel" */
 	toolExecution?: ToolExecutionMode;
 
-	/**
-	 * `"native"` = provider function calling; `"xml"` = XML-only (default). See {@link AgentLoopConfig.toolInvocation}.
-	 */
-	toolInvocation?: "native" | "xml";
-
 	/** Called before a tool is executed, after arguments have been validated. */
 	beforeToolCall?: (context: BeforeToolCallContext, signal?: AbortSignal) => Promise<BeforeToolCallResult | undefined>;
 
@@ -149,7 +144,6 @@ export class Agent {
 	private _transport: Transport;
 	private _maxRetryDelayMs?: number;
 	private _toolExecution: ToolExecutionMode;
-	private _toolInvocation: "native" | "xml";
 	private _beforeToolCall?: (
 		context: BeforeToolCallContext,
 		signal?: AbortSignal,
@@ -173,65 +167,38 @@ export class Agent {
 		this._transport = opts.transport ?? "sse";
 		this._maxRetryDelayMs = opts.maxRetryDelayMs;
 		this._toolExecution = opts.toolExecution ?? "parallel";
-		this._toolInvocation = opts.toolInvocation ?? "xml";
 		this._beforeToolCall = opts.beforeToolCall;
 		this._afterToolCall = opts.afterToolCall;
 	}
 
-	/**
-	 * Get the current session ID used for provider caching.
-	 */
 	get sessionId(): string | undefined {
 		return this._sessionId;
 	}
 
-	/**
-	 * Set the session ID for provider caching.
-	 * Call this when switching sessions (new session, branch, resume).
-	 */
 	set sessionId(value: string | undefined) {
 		this._sessionId = value;
 	}
 
-	/**
-	 * Get the current thinking budgets.
-	 */
 	get thinkingBudgets(): ThinkingBudgets | undefined {
 		return this._thinkingBudgets;
 	}
 
-	/**
-	 * Set custom thinking budgets for token-based providers.
-	 */
 	set thinkingBudgets(value: ThinkingBudgets | undefined) {
 		this._thinkingBudgets = value;
 	}
 
-	/**
-	 * Get the current preferred transport.
-	 */
 	get transport(): Transport {
 		return this._transport;
 	}
 
-	/**
-	 * Set the preferred transport.
-	 */
 	setTransport(value: Transport) {
 		this._transport = value;
 	}
 
-	/**
-	 * Get the current max retry delay in milliseconds.
-	 */
 	get maxRetryDelayMs(): number | undefined {
 		return this._maxRetryDelayMs;
 	}
 
-	/**
-	 * Set the maximum delay to wait for server-requested retries.
-	 * Set to 0 to disable the cap.
-	 */
 	set maxRetryDelayMs(value: number | undefined) {
 		this._maxRetryDelayMs = value;
 	}
@@ -269,7 +236,6 @@ export class Agent {
 		return () => this.listeners.delete(fn);
 	}
 
-	// State mutators
 	setSystemPrompt(v: string) {
 		this._state.systemPrompt = v;
 	}
@@ -310,19 +276,10 @@ export class Agent {
 		this._state.messages = [...this._state.messages, m];
 	}
 
-	/**
-	 * Queue a steering message while the agent is running.
-	 * Delivered after the current assistant turn finishes executing its tool calls,
-	 * before the next LLM call.
-	 */
 	steer(m: AgentMessage) {
 		this.steeringQueue.push(m);
 	}
 
-	/**
-	 * Queue a follow-up message to be processed after the agent finishes.
-	 * Delivered only when agent has no more tool calls or steering messages.
-	 */
 	followUp(m: AgentMessage) {
 		this.followUpQueue.push(m);
 	}
@@ -396,7 +353,6 @@ export class Agent {
 		this.followUpQueue = [];
 	}
 
-	/** Send a prompt with an AgentMessage */
 	async prompt(message: AgentMessage | AgentMessage[]): Promise<void>;
 	async prompt(input: string, images?: ImageContent[]): Promise<void>;
 	async prompt(input: string | AgentMessage | AgentMessage[], images?: ImageContent[]) {
@@ -432,9 +388,6 @@ export class Agent {
 		await this._runLoop(msgs);
 	}
 
-	/**
-	 * Continue from current context (used for retries and resuming queued messages).
-	 */
 	async continue() {
 		if (this._state.isStreaming) {
 			throw new Error("Agent is already processing. Wait for completion before continuing.");
@@ -507,11 +460,6 @@ export class Agent {
 		this.emit(event);
 	}
 
-	/**
-	 * Run the agent loop.
-	 * If messages are provided, starts a new conversation turn with those messages.
-	 * Otherwise, continues from existing context.
-	 */
 	private async _runLoop(messages?: AgentMessage[], options?: { skipInitialSteeringPoll?: boolean }) {
 		const model = this._state.model;
 		if (!model) throw new Error("No model configured");
@@ -544,7 +492,6 @@ export class Agent {
 			thinkingBudgets: this._thinkingBudgets,
 			maxRetryDelayMs: this._maxRetryDelayMs,
 			toolExecution: this._toolExecution,
-			toolInvocation: this._toolInvocation,
 			beforeToolCall: this._beforeToolCall,
 			afterToolCall: this._afterToolCall,
 			convertToLlm: this.convertToLlm,

@@ -889,14 +889,6 @@ export class AgentSession {
 		const loadedSkills = this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
-		const xmlToolDefinitions: ToolDefinition[] = [];
-		for (const name of validToolNames) {
-			const entry = this._toolDefinitions.get(name);
-			if (entry) {
-				xmlToolDefinitions.push(entry.definition);
-			}
-		}
-
 		return buildSystemPrompt({
 			cwd: this._cwd,
 			skills: loadedSkills,
@@ -906,7 +898,6 @@ export class AgentSession {
 			selectedTools: validToolNames,
 			toolSnippets,
 			promptGuidelines,
-			xmlToolDefinitions: xmlToolDefinitions.length > 0 ? xmlToolDefinitions : undefined,
 		});
 	}
 

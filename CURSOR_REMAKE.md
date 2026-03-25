@@ -32,6 +32,8 @@ Cursor 首次对话时注入 OS、Shell、Git repo 信息。pi 已对齐：
 
 ## 工具体系对比
 
+当前实现已改为 provider 原生 function/tool calling，下方 XML 相关记录为历史实现说明。
+
 ### 内置工具
 
 | Cursor 工具 | pi 工具 | 状态 |
@@ -55,6 +57,8 @@ Cursor 首次对话时注入 OS、Shell、Git repo 信息。pi 已对齐：
 
 ### 工具调用格式
 
+以下为历史 XML 方案记录，当前运行时已不再使用。
+
 | 方面 | Cursor | pi | 状态 |
 |---|---|---|---|
 | 格式 | `<function_calls><invoke name="...">` | `<function_calls><invoke name="...">` | done |
@@ -65,10 +69,14 @@ Cursor 首次对话时注入 OS、Shell、Git repo 信息。pi 已对齐：
 
 ### XML 实体编码
 
+以下为历史 XML 方案记录，当前运行时已不再使用。
+
 - `&amp;` → `&`, `&lt;` → `<`, `&gt;` → `>`, `&quot;` → `"`, `&apos;` → `'`
 - 文件：`packages/agent/src/xml-tool-calls.ts` → `decodeXmlEntities()`
 
 ### XmlToolCallSpec 类型
+
+以下为历史 XML 方案记录，当前运行时已不再使用。
 
 ```typescript
 export interface XmlToolCallSpec {
@@ -86,6 +94,8 @@ export interface XmlToolCallSpec {
 
 ### 工具调用后文字截断
 
+以下为历史 XML 方案记录，当前运行时已不再使用。
+
 Cursor 行为：`<function_calls>` 之后的任何文字被丢弃，不渲染、不捕获。
 
 | 位置 | 处理 |
@@ -99,6 +109,8 @@ pi 状态：**done** — `findFunctionCallsStart()` 定位 `<function_calls` 位
 文件：`packages/agent/src/xml-tool-calls.ts`
 
 ### 流式渲染
+
+以下为历史 XML 方案记录，当前运行时已不再使用。
 
 Cursor 行为：
 1. 流式接收文本

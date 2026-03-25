@@ -27,13 +27,15 @@ This monorepo uses **pnpm** (`packageManager` in root `package.json`). Install w
 
 ## Commands
 
+Agent behavior has moved to provider-native tool/function calling. Do not use or document XML-only tool invocation paths in new work.
+
 - After **code** changes (not documentation-only changes): run **`pnpm run check`** at the repo root (full output, no tail). Fix all errors, warnings, and infos before committing
 - `pnpm run check` does not run the full test suite
 - NEVER run: `pnpm run dev`, `pnpm run build`, `pnpm test` unless the user explicitly asks
 - Run **specific** tests only when the user instructs, from the **package** root, for example:
   ```bash
   cd packages/coding-agent && pnpm exec vitest --run test/tools.test.ts
-  cd packages/agent && pnpm exec vitest --run test/xml-tool-calls.test.ts
+  cd packages/agent && pnpm exec vitest --run test/agent-loop.test.ts
   ```
 - If you create or modify a test file, you MUST run that test file and iterate until it passes
 - NEVER commit unless the user asks
@@ -164,7 +166,7 @@ Ensure `[Unreleased]` CHANGELOGs are up to date before releasing.
 
 ```bash
 git status
-git add packages/agent/src/xml-tool-calls.ts packages/agent/CHANGELOG.md
+git add packages/agent/src/agent-loop.ts packages/agent/CHANGELOG.md
 git commit -m "fix(agent): description"
 git pull --rebase && git push
 ```

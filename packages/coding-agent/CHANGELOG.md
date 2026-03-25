@@ -10,7 +10,6 @@
 ### Added
 
 - Monorepo package manager switched to **pnpm** (`pnpm-workspace.yaml`, `packageManager` in root `package.json`, CI and docs updated). Install with `pnpm install`, verify with `pnpm run check`.
-- `ToolDefinition.xml` (Morph-style XML registration: root tag + `parameterTags` map) with `buildXmlToolCallsPromptSection`, `parseXmlToolCallsFromText`, and related helpers. Built-in tools `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls` document Morph-style XML in the system prompt when active. See [Morph XML tool calls](https://docs.morphllm.com/guides/xml-tool-calls).
 
 ### Fixed
 

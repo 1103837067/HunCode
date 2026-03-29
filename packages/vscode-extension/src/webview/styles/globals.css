@@ -1,0 +1,358 @@
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+	html,
+	body,
+	#app {
+		margin: 0;
+		padding: 0;
+		height: 100%;
+		background: var(--background);
+		color: var(--foreground);
+	}
+
+	body {
+		font-size: 12px;
+		line-height: 1.4;
+		font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+	}
+
+	.message-text {
+		font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+		font-size: var(--pi-chat-font-size, 13px);
+		line-height: 1.65;
+		letter-spacing: 0;
+		word-break: break-word;
+		color: var(--vscode-foreground);
+	}
+
+	.pi-box-panel {
+		margin: 0.4em 0;
+		overflow-x: auto;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+		font-size: 0.95em;
+		line-height: 1.55;
+		white-space: pre;
+		word-break: normal;
+		letter-spacing: 0;
+		font-kerning: none;
+		font-variant-ligatures: none;
+		text-rendering: optimizeSpeed;
+		color: var(--foreground);
+	}
+
+	.pi-box-panel code {
+		display: block;
+		min-width: max-content;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		border-radius: 0;
+		font: inherit;
+		line-height: inherit;
+		white-space: inherit;
+		word-break: inherit;
+		color: inherit;
+	}
+
+	.pi-markdown > :first-child {
+		margin-top: 0;
+	}
+
+	.pi-markdown > :last-child {
+		margin-bottom: 0;
+	}
+
+	.pi-markdown h1,
+	.pi-markdown h2,
+	.pi-markdown h3 {
+		margin: 0.9em 0 0.4em;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.pi-markdown h1 { font-size: 1.45em; }
+	.pi-markdown h2 { font-size: 1.28em; }
+	.pi-markdown h3 { font-size: 1.14em; }
+
+	.pi-markdown p,
+	.pi-markdown ul,
+	.pi-markdown ol,
+	.pi-markdown blockquote,
+	.pi-markdown pre {
+		margin: 0.5em 0;
+	}
+
+	.pi-markdown ul,
+	.pi-markdown ol {
+		padding-left: 1.5em;
+		list-style-position: outside;
+	}
+
+	.pi-markdown ul {
+		list-style-type: disc;
+	}
+
+	.pi-markdown ol {
+		list-style-type: decimal;
+	}
+
+	.pi-markdown li::marker {
+		color: var(--muted);
+	}
+
+	.pi-markdown li + li {
+		margin-top: 0.2em;
+	}
+
+	.pi-markdown a {
+		color: var(--vscode-textLink-foreground);
+		text-decoration: none;
+	}
+
+	.pi-markdown a:hover {
+		color: var(--vscode-textLink-activeForeground);
+		text-decoration: underline;
+	}
+
+	.pi-markdown code {
+		font-family: var(--vscode-editor-font-family, var(--vscode-font-family, monospace));
+		font-size: 0.92em;
+		background: var(--vscode-textCodeBlock-background, var(--card));
+		border-radius: 6px;
+		padding: 0.15em 0.35em;
+	}
+
+	.pi-markdown pre {
+		overflow-x: auto;
+		padding: 0.85em 1em;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--vscode-textCodeBlock-background, var(--card));
+	}
+
+	.pi-code-block {
+		margin: 0.65em 0;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		overflow: hidden;
+		background: var(--vscode-textCodeBlock-background, var(--card));
+	}
+
+	.pi-code-block__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75em;
+		padding: 0.45em 0.7em;
+		border-bottom: 1px solid var(--border);
+		background: var(--vscode-editorWidget-background, var(--card));
+	}
+
+	.pi-code-block__language {
+		font-size: 0.78em;
+		line-height: 1;
+		font-weight: 600;
+		text-transform: lowercase;
+		letter-spacing: 0.03em;
+		color: var(--muted);
+	}
+
+	.pi-code-block__copy {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35em;
+		padding: 0.2em 0.45em;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--muted);
+		font: inherit;
+		font-size: 0.78em;
+		cursor: pointer;
+	}
+
+	.pi-code-block__copy:hover {
+		background: var(--accent);
+		color: var(--foreground);
+	}
+
+	.pi-code-block__copy:focus-visible {
+		outline: 1px solid var(--ring);
+		outline-offset: 1px;
+	}
+
+	.pi-code-block pre {
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+	}
+
+	.pi-code-block pre code {
+		display: block;
+		padding: 0;
+		white-space: pre;
+	}
+
+	.pi-code-block .token.comment,
+	.pi-code-block .token.prolog,
+	.pi-code-block .token.doctype,
+	.pi-code-block .token.cdata {
+		color: var(--vscode-editorGhostText-foreground, #6a737d);
+	}
+
+	.pi-code-block .token.punctuation {
+		color: var(--vscode-editor-foreground, var(--foreground));
+	}
+
+	.pi-code-block .token.property,
+	.pi-code-block .token.tag,
+	.pi-code-block .token.boolean,
+	.pi-code-block .token.number,
+	.pi-code-block .token.constant,
+	.pi-code-block .token.symbol,
+	.pi-code-block .token.deleted {
+		color: var(--vscode-debugTokenExpression-number, #b5cea8);
+	}
+
+	.pi-code-block .token.selector,
+	.pi-code-block .token.attr-name,
+	.pi-code-block .token.string,
+	.pi-code-block .token.char,
+	.pi-code-block .token.builtin,
+	.pi-code-block .token.inserted {
+		color: var(--vscode-debugTokenExpression-string, #ce9178);
+	}
+
+	.pi-code-block .token.operator,
+	.pi-code-block .token.entity,
+	.pi-code-block .token.url,
+	.pi-code-block .language-css .token.string,
+	.pi-code-block .style .token.string {
+		color: var(--vscode-symbolIcon-operatorForeground, #d4d4d4);
+	}
+
+	.pi-code-block .token.atrule,
+	.pi-code-block .token.attr-value,
+	.pi-code-block .token.keyword {
+		color: var(--vscode-symbolIcon-keywordForeground, #c586c0);
+	}
+
+	.pi-code-block .token.function,
+	.pi-code-block .token.class-name {
+		color: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
+	}
+
+	.pi-code-block .token.regex,
+	.pi-code-block .token.important,
+	.pi-code-block .token.variable {
+		color: var(--vscode-symbolIcon-variableForeground, #9cdcfe);
+	}
+
+	.pi-markdown pre code {
+		background: transparent;
+		padding: 0;
+		border-radius: 0;
+		font-size: 0.9em;
+	}
+
+	.pi-markdown blockquote {
+		padding: 0.15em 0 0.15em 1em;
+		border-left: 3px solid var(--vscode-textSeparator-foreground, var(--border));
+		color: var(--muted);
+		background: var(--vscode-textBlockQuote-background, transparent);
+	}
+
+	.pi-markdown hr {
+		margin: 1em 0;
+		border: 0;
+		border-top: 1px solid var(--vscode-textSeparator-foreground, var(--border));
+	}
+
+	.pi-markdown-table-wrap {
+		overflow-x: auto;
+		margin: 0.65em 0;
+	}
+
+	.pi-markdown table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.95em;
+	}
+
+	.pi-markdown th,
+	.pi-markdown td {
+		border: 1px solid var(--border);
+		padding: 0.5em 0.65em;
+		text-align: left;
+		vertical-align: top;
+	}
+
+	.pi-markdown th {
+		background: var(--vscode-editorWidget-background, var(--card));
+		font-weight: 600;
+	}
+
+	textarea::-webkit-scrollbar {
+		width: 4px;
+		background: transparent;
+	}
+	textarea::-webkit-scrollbar-thumb {
+		background: var(--vscode-scrollbarSlider-background);
+		border-radius: 4px;
+	}
+	textarea::-webkit-scrollbar-thumb:hover {
+		background: var(--vscode-scrollbarSlider-hoverBackground);
+	}
+	textarea::-webkit-scrollbar-thumb:active {
+		background: var(--vscode-scrollbarSlider-activeBackground);
+	}
+	textarea::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.pi-scroll-area {
+		scrollbar-gutter: auto;
+	}
+	.pi-scroll-area::-webkit-scrollbar {
+		width: 4px;
+		height: 4px;
+		background: transparent;
+	}
+	.pi-scroll-area::-webkit-scrollbar-thumb {
+		background: var(--vscode-scrollbarSlider-background);
+		border-radius: 4px;
+	}
+	.pi-scroll-area::-webkit-scrollbar-thumb:hover {
+		background: var(--vscode-scrollbarSlider-hoverBackground);
+	}
+	.pi-scroll-area::-webkit-scrollbar-thumb:active {
+		background: var(--vscode-scrollbarSlider-activeBackground);
+	}
+	.pi-scroll-area::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	.scroll-area-overlay {
+		scrollbar-width: none;
+		-ms-overflow-style: none;
+	}
+	.scroll-area-overlay::-webkit-scrollbar {
+		display: none;
+	}
+
+	.tabs-scroll-overlay {
+		scrollbar-width: none;
+	}
+	.tabs-scroll-overlay::-webkit-scrollbar {
+		display: none;
+	}
+}

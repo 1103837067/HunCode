@@ -1,0 +1,9 @@
+**/.DS_Store
+**/node_modules/**
+src/**
+test/**
+scripts/**
+.vscode/**
+.vscodeignore
+tsconfig*.json
+pnpm-lock.yaml

@@ -1,0 +1,19 @@
+:root {
+	--background: var(--vscode-sideBar-background, #0f172a);
+	--foreground: var(--vscode-sideBar-foreground, #f8fafc);
+	--muted: var(--vscode-descriptionForeground, #94a3b8);
+	--border: var(--vscode-panel-border, #475569);
+	--card: var(--vscode-editorWidget-background, #1b2336);
+	--popover: var(--vscode-editorWidget-background, #1b2336);
+	--input: var(--vscode-input-background, var(--vscode-editorWidget-background, #1b2336));
+	--ring: var(--vscode-focusBorder, #60a5fa);
+	--primary: var(--vscode-button-background, #2563eb);
+	--primary-foreground: var(--vscode-button-foreground, #ffffff);
+	--secondary: var(--vscode-button-secondaryBackground, rgba(148, 163, 184, 0.16));
+	--secondary-foreground: var(--vscode-button-secondaryForeground, var(--vscode-sideBar-foreground, #f8fafc));
+	--accent: var(--vscode-list-hoverBackground, rgba(148, 163, 184, 0.12));
+	--accent-foreground: var(--vscode-sideBar-foreground, #f8fafc);
+	--destructive: var(--vscode-errorForeground, #ef4444);
+	--success: var(--vscode-terminal-ansiGreen, #22c55e);
+	--warning: var(--vscode-terminal-ansiYellow, #f59e0b);
+}

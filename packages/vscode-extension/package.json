@@ -1,0 +1,157 @@
+{
+  "name": "pi-vscode-extension",
+  "displayName": "HunCode",
+  "publisher": "mariozechner",
+  "version": "0.0.0",
+  "private": true,
+  "description": "VS Code extension UI for pi",
+  "type": "module",
+  "main": "./dist/extension.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "vscode": "^1.100.0"
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "dev": "pnpm run build && node ./scripts/dev.mjs",
+    "dev:watch": "node ./scripts/build.mjs --watch --skip-webview --skip-tailwind",
+    "dev:webview": "vite --config ./vite.webview.config.mjs",
+    "check": "tsc --noEmit -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "workspace:*",
+    "@types/prismjs": "^1.26.6",
+    "@vscode/webview-ui-toolkit": "^1.4.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.7.0",
+    "prismjs": "^1.30.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.1.0",
+    "remark-gfm": "^4.0.1",
+    "string-width": "^8.2.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/vscode": "^1.100.0",
+    "@vitejs/plugin-react-swc": "^3.7.1",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "^0.25.11",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.14",
+    "vitest": "^3.2.4"
+  },
+  "activationEvents": [
+    "onView:pi.chat",
+    "onCommand:pi.openChat",
+    "onCommand:pi.newChat",
+    "onCommand:pi.showSessionHistory",
+    "onCommand:pi.openSettings",
+    "onCommand:pi.stopChat",
+    "onCommand:pi.addCurrentFileContext",
+    "onCommand:pi.addSelectionContext"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "HunCode",
+      "properties": {
+        "pi.displayLanguage": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "zh-CN",
+            "en"
+          ],
+          "default": "auto",
+          "markdownDescription": "Controls the Pi extension display language. `auto` follows the current VS Code UI language.",
+          "scope": "window"
+        },
+        "pi.chatFontSize": {
+          "type": "number",
+          "default": 13,
+          "minimum": 11,
+          "maximum": 18,
+          "markdownDescription": "Controls the chat message font size used by the Pi sidebar.",
+          "scope": "window"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pi",
+          "title": "HunCode",
+          "icon": "resources/pi.svg"
+        }
+      ]
+    },
+    "views": {
+      "pi": [
+        {
+          "id": "pi.chat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pi.openChat",
+        "title": "HunCode: Open Chat"
+      },
+      {
+        "command": "pi.showSessionHistory",
+        "title": "HunCode: Show Session History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "pi.newChat",
+        "title": "HunCode: New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pi.openSettings",
+        "title": "HunCode: Open Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "pi.stopChat",
+        "title": "HunCode: Stop Current Task"
+      },
+      {
+        "command": "pi.addCurrentFileContext",
+        "title": "HunCode: Add Current File as Context"
+      },
+      {
+        "command": "pi.addSelectionContext",
+        "title": "HunCode: Add Selection as Context"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pi.newChat",
+          "when": "view == pi.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pi.showSessionHistory",
+          "when": "view == pi.chat",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pi.openSettings",
+          "when": "view == pi.chat",
+          "group": "navigation@3"
+        }
+      ]
+    }
+  }
+}

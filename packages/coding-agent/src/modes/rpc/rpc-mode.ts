@@ -19,8 +19,16 @@ import type {
 	ExtensionWidgetOptions,
 } from "../../core/extensions/index.js";
 import { takeOverStdout, writeRawStdout } from "../../core/output-guard.js";
+import { SessionManager } from "../../core/session-manager.js";
 import { type Theme, theme } from "../interactive/theme/theme.js";
 import { attachJsonlLineReader, serializeJsonLine } from "./jsonl.js";
+import {
+	deleteModelConfig,
+	deleteProviderConfig,
+	readModelsConfig,
+	upsertModelConfig,
+	upsertProviderConfig,
+} from "./models-config.js";
 import type {
 	RpcCommand,
 	RpcExtensionUIRequest,
@@ -36,6 +44,7 @@ export type {
 	RpcExtensionUIRequest,
 	RpcExtensionUIResponse,
 	RpcResponse,
+	RpcSessionInfo,
 	RpcSessionState,
 } from "./rpc-types.js";
 
@@ -414,6 +423,39 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			}
 
 			// =================================================================
+			// Model Config (models.json CRUD)
+			// =================================================================
+
+			case "get_models_config": {
+				const config = readModelsConfig();
+				return success(id, "get_models_config", { config });
+			}
+
+			case "upsert_provider_config": {
+				const config = upsertProviderConfig(command.payload);
+				session.modelRegistry.refresh();
+				return success(id, "upsert_provider_config", { config });
+			}
+
+			case "upsert_model_config": {
+				const config = upsertModelConfig(command.payload);
+				session.modelRegistry.refresh();
+				return success(id, "upsert_model_config", { config });
+			}
+
+			case "delete_provider_config": {
+				const config = deleteProviderConfig(command.provider);
+				session.modelRegistry.refresh();
+				return success(id, "delete_provider_config", { config });
+			}
+
+			case "delete_model_config": {
+				const config = deleteModelConfig(command.provider, command.modelId);
+				session.modelRegistry.refresh();
+				return success(id, "delete_model_config", { config });
+			}
+
+			// =================================================================
 			// Thinking
 			// =================================================================
 
@@ -503,6 +545,22 @@ export async function runRpcMode(session: AgentSession): Promise<never> {
 			case "switch_session": {
 				const cancelled = !(await session.switchSession(command.sessionPath));
 				return success(id, "switch_session", { cancelled });
+			}
+
+			case "list_sessions": {
+				const sessions = await SessionManager.listAll();
+				return success(id, "list_sessions", {
+					sessions: sessions.map((s) => ({
+						path: s.path,
+						id: s.id,
+						name: s.name,
+						cwd: s.cwd,
+						created: s.created.toISOString(),
+						modified: s.modified.toISOString(),
+						messageCount: s.messageCount,
+						firstMessage: s.firstMessage,
+					})),
+				});
 			}
 
 			case "fork": {

@@ -11,6 +11,7 @@ import type { SessionStats } from "../../core/agent-session.js";
 import type { BashResult } from "../../core/bash-executor.js";
 import type { CompactionResult } from "../../core/compaction/index.js";
 import type { SourceInfo } from "../../core/source-info.js";
+import type { RpcModelsConfig, UpsertModelConfigPayload, UpsertProviderConfigPayload } from "./models-config.js";
 
 // ============================================================================
 // RPC Commands (stdin)
@@ -31,6 +32,13 @@ export type RpcCommand =
 	| { id?: string; type: "set_model"; provider: string; modelId: string }
 	| { id?: string; type: "cycle_model" }
 	| { id?: string; type: "get_available_models" }
+
+	// Model config (models.json CRUD)
+	| { id?: string; type: "get_models_config" }
+	| { id?: string; type: "upsert_provider_config"; payload: UpsertProviderConfigPayload }
+	| { id?: string; type: "upsert_model_config"; payload: UpsertModelConfigPayload }
+	| { id?: string; type: "delete_provider_config"; provider: string }
+	| { id?: string; type: "delete_model_config"; provider: string; modelId: string }
 
 	// Thinking
 	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel }
@@ -56,6 +64,7 @@ export type RpcCommand =
 	| { id?: string; type: "get_session_stats" }
 	| { id?: string; type: "export_html"; outputPath?: string }
 	| { id?: string; type: "switch_session"; sessionPath: string }
+	| { id?: string; type: "list_sessions" }
 	| { id?: string; type: "fork"; entryId: string }
 	| { id?: string; type: "get_fork_messages" }
 	| { id?: string; type: "get_last_assistant_text" }
@@ -102,6 +111,18 @@ export interface RpcSessionState {
 	pendingMessageCount: number;
 }
 
+/** Serialized session info for list_sessions response */
+export interface RpcSessionInfo {
+	path: string;
+	id: string;
+	name?: string;
+	cwd: string;
+	created: string;
+	modified: string;
+	messageCount: number;
+	firstMessage: string;
+}
+
 // ============================================================================
 // RPC Responses (stdout)
 // ============================================================================
@@ -141,6 +162,37 @@ export type RpcResponse =
 			data: { models: Model<any>[] };
 	  }
 
+	// Model config
+	| { id?: string; type: "response"; command: "get_models_config"; success: true; data: { config: RpcModelsConfig } }
+	| {
+			id?: string;
+			type: "response";
+			command: "upsert_provider_config";
+			success: true;
+			data: { config: RpcModelsConfig };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "upsert_model_config";
+			success: true;
+			data: { config: RpcModelsConfig };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "delete_provider_config";
+			success: true;
+			data: { config: RpcModelsConfig };
+	  }
+	| {
+			id?: string;
+			type: "response";
+			command: "delete_model_config";
+			success: true;
+			data: { config: RpcModelsConfig };
+	  }
+
 	// Thinking
 	| { id?: string; type: "response"; command: "set_thinking_level"; success: true }
 	| {
@@ -171,6 +223,13 @@ export type RpcResponse =
 	| { id?: string; type: "response"; command: "get_session_stats"; success: true; data: SessionStats }
 	| { id?: string; type: "response"; command: "export_html"; success: true; data: { path: string } }
 	| { id?: string; type: "response"; command: "switch_session"; success: true; data: { cancelled: boolean } }
+	| {
+			id?: string;
+			type: "response";
+			command: "list_sessions";
+			success: true;
+			data: { sessions: RpcSessionInfo[] };
+	  }
 	| { id?: string; type: "response"; command: "fork"; success: true; data: { text: string; cancelled: boolean } }
 	| {
 			id?: string;

@@ -138,16 +138,17 @@ function messagesToTimeline(messages: Array<Record<string, unknown>>): TimelineI
 					}
 					const toolId = String(block.id ?? `tool-${parts.length}`);
 					const toolName = String(block.name ?? "unknown");
+					const args = block.arguments as Record<string, unknown> | undefined;
 					pendingToolCalls.set(toolId, {
 						name: toolName,
-						args: block.arguments as Record<string, unknown> | undefined,
+						args,
 					});
 					parts.push({
 						kind: "tool",
 						toolCallId: toolId,
 						id: toolId,
 						toolName,
-						summary: summarizeToolData(block.arguments),
+						args,
 						output: "",
 						state: "success",
 						isExpanded: false,
@@ -173,6 +174,8 @@ function messagesToTimeline(messages: Array<Record<string, unknown>>): TimelineI
 			const toolCallId = String(msg.toolCallId ?? "");
 			const isError = msg.isError === true;
 			const output = extractToolResultText(msg.content);
+			// Extract tool-specific details (e.g., diff for edit tool)
+			const details = msg.details as Record<string, unknown> | undefined;
 
 			for (let i = timeline.length - 1; i >= 0; i--) {
 				const item = timeline[i];
@@ -186,6 +189,7 @@ function messagesToTimeline(messages: Array<Record<string, unknown>>): TimelineI
 								...toolPart,
 								output,
 								state: isError ? "error" : "success",
+								details,
 							};
 						}
 						timeline[i] = { ...item, parts: updatedParts };
@@ -274,19 +278,21 @@ function syncPartsFromSnapshot(
 		} else if (block.type === "toolCall" && typeof block.id === "string" && typeof block.name === "string") {
 			const toolCallId = block.id as string;
 			const toolName = block.name as string;
+			const args = block.arguments as Record<string, unknown> | undefined;
 			toolCallIds.push(toolCallId);
 			lastToolCallId = toolCallId;
 
 			const existing = existingToolParts.get(toolCallId);
 			if (existing) {
-				parts.push(existing);
+				// Update args if we have new ones (LLM streams arguments progressively)
+				parts.push(args ? { ...existing, args } : existing);
 			} else {
 				parts.push({
 					kind: "tool",
 					id: toolCallId,
 					toolCallId,
 					toolName,
-					summary: summarizeToolData(block.arguments),
+					args,
 					output: "",
 					state: "running",
 					isExpanded: false,
@@ -309,8 +315,17 @@ function syncPartsFromSnapshot(
 	};
 }
 
-function appendToolPart(item: TimelineAssistantItem, toolCallId: string, toolName: string): TimelineAssistantItem {
-	if (item.parts.some((part) => part.kind === "tool" && part.toolCallId === toolCallId)) {
+function appendToolPart(item: TimelineAssistantItem, toolCallId: string, toolName: string, args?: Record<string, unknown>): TimelineAssistantItem {
+	const existingIndex = item.parts.findIndex((part) => part.kind === "tool" && part.toolCallId === toolCallId);
+	if (existingIndex >= 0) {
+		// Update existing tool part with complete args from tool_execution_start
+		// (message_update may have partial arguments from streaming LLM)
+		const existing = item.parts[existingIndex];
+		if (existing.kind === "tool" && args) {
+			const updatedParts = [...item.parts];
+			updatedParts[existingIndex] = { ...existing, args };
+			return { ...item, parts: updatedParts };
+		}
 		return item;
 	}
 	return {
@@ -322,6 +337,7 @@ function appendToolPart(item: TimelineAssistantItem, toolCallId: string, toolNam
 				id: toolCallId,
 				toolCallId,
 				toolName,
+				args,
 				output: "",
 				state: "running",
 				isExpanded: false,
@@ -347,17 +363,6 @@ function updateToolPart(
 			return updater(part);
 		}),
 	};
-}
-
-function summarizeToolData(value: unknown): string | undefined {
-	if (typeof value === "string") return value;
-	if (value === undefined) return undefined;
-	try {
-		const json = JSON.stringify(value);
-		return json.length > 200 ? `${json.slice(0, 197)}...` : json;
-	} catch {
-		return String(value);
-	}
 }
 
 /**
@@ -511,7 +516,7 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 		case "tool_execution_start": {
 			const toolCallId = event.toolCallId as string;
 			const toolName = event.toolName as string;
-			const summary = summarizeToolData(event.args);
+			const args = event.args as Record<string, unknown> | undefined;
 			const assistantMessageId = state.activeAssistantMessageId;
 			const baseState: WebviewState = {
 				...state,
@@ -527,7 +532,7 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 							kind: "tool",
 							id: toolCallId,
 							toolName,
-							summary,
+							args,
 							output: "",
 							state: "running",
 							isExpanded: false,
@@ -537,24 +542,28 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 				};
 			}
 			return updateAssistant(baseState, assistantMessageId, (item) => ({
-				...appendToolPart(item, toolCallId, toolName),
+				...appendToolPart(item, toolCallId, toolName, args),
 				streamState: "responding",
 			}));
 		}
 
 		case "tool_execution_update": {
 			const toolCallId = event.toolCallId as string;
-			const summary = summarizeToolData(event.partialResult);
+			const args = event.args as Record<string, unknown> | undefined;
+			// partialResult = { content: [{ type: "text", text: "..." }], details: {...} }
+			const partialResult = event.partialResult as { content?: unknown; details?: unknown } | undefined;
+			const streamOutput = extractToolResultText(partialResult?.content);
 			return {
 				...state,
 				timeline: state.timeline.map((item) => {
 					if (item.kind === "tool" && item.id === toolCallId) {
-						return { ...item, summary: summary ?? item.summary } satisfies TimelineToolItem;
+						return { ...item, args: args ?? item.args, output: streamOutput || item.output } satisfies TimelineToolItem;
 					}
 					if (item.kind === "assistant") {
 						return updateToolPart(item, toolCallId, (part) => ({
 							...part,
-							summary: summary ?? part.summary,
+							args: args ?? part.args,
+							output: streamOutput || part.output,
 						}));
 					}
 					return item;
@@ -565,7 +574,10 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 		case "tool_execution_end": {
 			const toolCallId = event.toolCallId as string;
 			const isError = event.isError === true;
-			const summary = summarizeToolData(event.result);
+			// event.result = { content, details } from agent-loop.ts
+			const result = event.result as { content?: unknown; details?: unknown } | undefined;
+			const details = result?.details as Record<string, unknown> | undefined;
+			const output = extractToolResultText(result?.content);
 			const activeToolCallIds = state.activeToolCallIds.filter((id) => id !== toolCallId);
 			const nextStatus: ChatStatus = activeToolCallIds.length > 0 ? "running-tools" : "thinking";
 			return {
@@ -576,17 +588,19 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 					if (item.kind === "tool" && item.id === toolCallId) {
 						return {
 							...item,
-							summary: summary ?? item.summary,
+							output,
 							state: isError ? "error" : "success",
 							finishedAt: Date.now(),
+							details,
 						} satisfies TimelineToolItem;
 					}
 					if (item.kind === "assistant") {
 						return updateToolPart(item, toolCallId, (part) => ({
 							...part,
-							summary: summary ?? part.summary,
+							output,
 							state: isError ? "error" : "success",
 							finishedAt: Date.now(),
+							details,
 						}));
 					}
 					return item;

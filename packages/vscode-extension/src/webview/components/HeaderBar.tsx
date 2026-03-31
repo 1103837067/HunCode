@@ -98,8 +98,6 @@ export function HeaderBar({
 	historyOpenSignal,
 }: HeaderBarProps) {
 	const [historyOpen, setHistoryOpen] = React.useState(false);
-	const [historyVisible, setHistoryVisible] = React.useState(false);
-	const [historyProgress, setHistoryProgress] = React.useState(0);
 	const [tabsHovered, setTabsHovered] = React.useState(false);
 	const [draggingScrollbar, setDraggingScrollbar] = React.useState(false);
 	const groupedSessions = React.useMemo(() => groupSessions(locale, sessionHistory), [locale, sessionHistory]);
@@ -141,49 +139,9 @@ export function HeaderBar({
 
 	React.useEffect(() => {
 		if (!historyOpenSignal) return;
-		setHistoryVisible(true);
 		setHistoryOpen(true);
 		refreshSessionsRef.current();
 	}, [historyOpenSignal]);
-
-	React.useEffect(() => {
-		if (!historyVisible && historyProgress === 0) return;
-		const host = globalThis as typeof globalThis & {
-			requestAnimationFrame?: (callback: (time: number) => void) => number;
-			cancelAnimationFrame?: (handle: number) => void;
-		};
-		const durationMs = 300;
-		const startProgress = historyProgress;
-		const targetProgress = historyOpen ? 1 : 0;
-		if (startProgress === targetProgress) {
-			if (targetProgress === 0) setHistoryVisible(false);
-			return;
-		}
-		const startTimeRef = { value: 0 };
-		let frameId = 0;
-		const easeOutCubic = (value: number) => 1 - (1 - value) ** 3;
-		const step = (time: number) => {
-			if (!startTimeRef.value) startTimeRef.value = time;
-			const elapsed = Math.min(1, (time - startTimeRef.value) / durationMs);
-			const eased = easeOutCubic(elapsed);
-			const nextProgress = startProgress + (targetProgress - startProgress) * eased;
-			setHistoryProgress(nextProgress);
-			if (elapsed < 1) {
-				frameId = host.requestAnimationFrame ? host.requestAnimationFrame(step) : 0;
-				return;
-			}
-			setHistoryProgress(targetProgress);
-			if (targetProgress === 0) setHistoryVisible(false);
-		};
-		if (host.requestAnimationFrame) frameId = host.requestAnimationFrame(step);
-		else {
-			setHistoryProgress(targetProgress);
-			if (targetProgress === 0) setHistoryVisible(false);
-		}
-		return () => {
-			if (frameId && host.cancelAnimationFrame) host.cancelAnimationFrame(frameId);
-		};
-	}, [historyOpen, historyVisible, historyProgress]);
 
 	React.useEffect(() => {
 		const element = tabsScrollRef.current as {
@@ -249,79 +207,69 @@ export function HeaderBar({
 
 	return (
 		<div className="relative flex flex-col">
-			{historyVisible ? (
-				<div
-					className={[
-						"relative z-10 overflow-hidden border-b border-border bg-[var(--vscode-editorWidget-background)] shadow-[0_10px_30px_var(--vscode-widget-shadow)] transition-[opacity,transform] duration-300 ease-out origin-top",
-						historyOpen ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2",
-					].join(" ")}
-					style={{ height: `${historyProgress * 33}vh` }}
-				>
-					<div className="flex items-center justify-between border-b border-border px-3 py-2">
-						<div className="flex items-center gap-2 text-[12px] font-medium text-foreground">
-							<Clock3 className="h-3.5 w-3.5 text-[var(--vscode-descriptionForeground)]" />
-							<span>{t(locale, "sessionHistory")}</span>
-						</div>
-						<button
-							type="button"
-							className="flex h-6 w-6 items-center justify-center rounded-sm text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] hover:text-foreground"
-							title={locale === "zh-CN" ? "关闭历史" : "Close history"}
-							onClick={() => setHistoryOpen(false)}
-						>
-							<X className="h-3.5 w-3.5" />
-						</button>
+			{/* History panel - pure CSS transition */}
+			<div
+				className="relative z-10 overflow-hidden border-b border-border bg-[var(--vscode-editorWidget-background)] shadow-[0_10px_30px_var(--vscode-widget-shadow)] transition-[max-height,opacity] duration-200 ease-out"
+				style={{
+					maxHeight: historyOpen ? '240px' : '0',
+					opacity: historyOpen ? 1 : 0,
+				}}
+			>
+				<div className="flex items-center justify-between border-b border-border px-3 py-2">
+					<div className="flex items-center gap-2 text-[12px] font-medium text-foreground">
+						<Clock3 className="h-3.5 w-3.5 text-[var(--vscode-descriptionForeground)]" />
+						<span>{t(locale, "sessionHistory")}</span>
 					</div>
-					<div className="absolute left-0 right-0 bottom-0 top-[37px]">
-						<div className="relative h-full overflow-y-auto px-2 py-2">
-							<div className={[
-								"absolute inset-0 flex items-center justify-center transition-[opacity,transform] duration-300 ease-out",
-								historyLoading ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none",
-							].join(" ")}>
-								<Loader2 className="h-4 w-4 animate-spin text-[var(--vscode-descriptionForeground)]" />
-							</div>
-							<div className={[
-								"transition-[opacity,transform] duration-300 ease-out",
-								historyLoading ? "opacity-0 translate-y-1 pointer-events-none" : "opacity-100 translate-y-0",
-							].join(" ")}>
-								{groupedSessions.length > 0 ? (
-									groupedSessions.map((group) => (
-										<div key={group.key} className="pb-3 last:pb-0">
-											<div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--vscode-descriptionForeground)] opacity-70">
-												{group.label}
-											</div>
-											<div className="space-y-1">
-												{group.items.map((item) => {
-													const isCurrentSession = activeTab?.kind === "session" && activeTab.sessionPath === item.path;
-													return (
-														<button
-															key={item.path}
-															type="button"
-															className={[
-																"flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--vscode-list-hoverBackground)]",
-																isCurrentSession ? "bg-[var(--vscode-list-activeSelectionBackground)]" : "",
-															].join(" ")}
-															title={getSessionLabel(item)}
-															onClick={() => handleOpenSession(item)}
-														>
-															<span className={["mt-1 h-[7px] w-[7px] shrink-0 rounded-full", isCurrentSession ? "bg-[var(--vscode-testing-iconPassed)]" : "bg-[var(--vscode-descriptionForeground)] opacity-40"].join(" ")} />
-															<div className="min-w-0 flex-1">
-																<div className="truncate text-[12px] text-foreground">{getSessionLabel(item)}</div>
-																<div className="truncate pt-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">{item.path}</div>
-															</div>
-														</button>
-													);
-												})}
-											</div>
-										</div>
-									))
-								) : (
-									<div className="flex min-h-[180px] items-center justify-center text-[12px] text-muted">{t(locale, "noSessionHistory")}</div>
-								)}
-							</div>
-						</div>
-					</div>
+					<button
+						type="button"
+						className="flex h-6 w-6 items-center justify-center rounded-sm text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] hover:text-foreground"
+						title={locale === "zh-CN" ? "关闭历史" : "Close history"}
+						onClick={() => setHistoryOpen(false)}
+					>
+						<X className="h-3.5 w-3.5" />
+					</button>
 				</div>
-			) : null}
+				<div className="h-[200px] overflow-y-auto px-2 py-2">
+					{historyLoading ? (
+						<div className="flex h-full items-center justify-center">
+							<Loader2 className="h-4 w-4 animate-spin text-[var(--vscode-descriptionForeground)]" />
+						</div>
+					) : groupedSessions.length > 0 ? (
+						groupedSessions.map((group) => (
+							<div key={group.key} className="pb-3 last:pb-0">
+								<div className="px-2 py-1 text-[10px] font-medium uppercase tracking-[0.06em] text-[var(--vscode-descriptionForeground)] opacity-70">
+									{group.label}
+								</div>
+								<div className="space-y-1">
+									{group.items.map((item) => {
+										const isCurrentSession = activeTab?.kind === "session" && activeTab.sessionPath === item.path;
+										return (
+											<button
+												key={item.path}
+												type="button"
+												className={[
+													"flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-[var(--vscode-list-hoverBackground)]",
+													isCurrentSession ? "bg-[var(--vscode-list-activeSelectionBackground)]" : "",
+												].join(" ")}
+												title={getSessionLabel(item)}
+												onClick={() => handleOpenSession(item)}
+											>
+												<span className={["mt-1 h-[7px] w-[7px] shrink-0 rounded-full", isCurrentSession ? "bg-[var(--vscode-testing-iconPassed)]" : "bg-[var(--vscode-descriptionForeground)] opacity-40"].join(" ")} />
+												<div className="min-w-0 flex-1">
+													<div className="truncate text-[12px] text-foreground">{getSessionLabel(item)}</div>
+													<div className="truncate pt-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">{item.path}</div>
+												</div>
+											</button>
+										);
+									})}
+								</div>
+							</div>
+						))
+					) : (
+						<div className="flex h-full items-center justify-center text-[12px] text-muted">{t(locale, "noSessionHistory")}</div>
+					)}
+				</div>
+			</div>
 			<header className="flex h-9 items-center bg-background px-2">
 				{/* Scrollable tabs list */}
 				<div className="relative flex min-w-0 flex-1 overflow-hidden self-end" onMouseEnter={() => setTabsHovered(true)} onMouseLeave={() => setTabsHovered(false)}>
@@ -338,8 +286,8 @@ export function HeaderBar({
 												"flex h-8 shrink-0 px-2 text-[11px]",
 												"border-t border-x border-[var(--vscode-panel-border)]",
 												isActive || isPending
-													? "relative z-10 rounded-t-md bg-[var(--vscode-editor-background)] text-foreground"
-													: "rounded-t-sm bg-[var(--vscode-sideBar-background)] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] hover:text-foreground",
+													? "relative z-10 rounded-t-md border-b-0 bg-[var(--vscode-editor-background)] text-foreground"
+													: "rounded-t-sm border-b bg-[var(--vscode-sideBar-background)] text-[var(--vscode-descriptionForeground)] hover:bg-[var(--vscode-toolbar-hoverBackground)] hover:text-foreground",
 											].join(" ")}
 										>
 											<button
@@ -365,8 +313,8 @@ export function HeaderBar({
 											</button>
 										</div>
 										<div className={[
-											"h-8 w-1 shrink-0 border-b border-[var(--vscode-panel-border)]",
-											isActive || isPending ? "relative z-10 bg-[var(--vscode-editor-background)]" : "bg-[var(--vscode-sideBar-background)]",
+											"h-8 w-1 shrink-0",
+											isActive || isPending ? "relative z-10 border-b-0 bg-[var(--vscode-editor-background)]" : "border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-sideBar-background)]",
 										].join(" ")} />
 									</React.Fragment>
 								);

@@ -32,7 +32,7 @@ export function UserMessageCard({ item }: { item: TimelineUserItem }) {
 	}, [expanded]);
 
 	return (
-		<div className="px-2 py-1.5" ref={containerRef}>
+		<div ref={containerRef}>
 			{expanded ? (
 				<PromptEditorCard
 					value={value}
@@ -53,13 +53,11 @@ export function UserMessageCard({ item }: { item: TimelineUserItem }) {
 					onChange={setValue}
 				/>
 			) : (
-				<div className="rounded-2xl border border-border/70 bg-[var(--vscode-editorWidget-background)]/60 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-					<PromptCollapsedCard
-						content={<MarkdownMessage content={item.text} />}
-						contextPills={item.context}
-						onClick={() => setExpanded(true)}
-					/>
-				</div>
+				<PromptCollapsedCard
+					content={<MarkdownMessage content={item.text} />}
+					contextPills={item.context}
+					onClick={() => setExpanded(true)}
+				/>
 			)}
 		</div>
 	);

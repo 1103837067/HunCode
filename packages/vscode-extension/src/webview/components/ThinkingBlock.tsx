@@ -1,5 +1,6 @@
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Lightbulb } from "lucide-react";
+import { cn } from "../lib/cn.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 
 function extractThinkingHeading(text: string): string | undefined {
@@ -20,6 +21,80 @@ function extractThinkingHeading(text: string): string | undefined {
 
 	return undefined;
 }
+
+// ============================================================================
+// Streaming Content with Shimmer
+// ============================================================================
+
+function ShimmerBar({ progress }: { progress: number }) {
+	return (
+		<div className="relative h-[2px] w-full overflow-hidden rounded-full bg-[var(--vscode-widget-border)]">
+			<div
+				className="absolute inset-y-0 left-0 bg-purple-400/60 transition-all duration-150"
+				style={{ width: `${progress}%` }}
+			/>
+			<div
+				className="absolute inset-y-0 w-10 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+				style={{
+					animation: "shimmer-sweep 1.5s ease-in-out infinite",
+				}}
+			/>
+		</div>
+	);
+}
+
+function StreamingContent({ text }: { text: string }) {
+	const [displayedContent, setDisplayedContent] = React.useState("");
+	const contentRef = React.useRef<HTMLDivElement>(null);
+
+	React.useEffect(() => {
+		if (!text) {
+			setDisplayedContent("");
+			return;
+		}
+
+		let currentIndex = 0;
+		const charsToAdd = Math.min(3, text.length);
+
+		const interval = setInterval(() => {
+			if (currentIndex < text.length) {
+				currentIndex += charsToAdd;
+				setDisplayedContent(text.slice(0, currentIndex));
+			} else {
+				clearInterval(interval);
+			}
+		}, 15);
+
+		return () => clearInterval(interval);
+	}, [text]);
+
+	React.useEffect(() => {
+		if (contentRef.current) {
+			contentRef.current.scrollTop = contentRef.current.scrollHeight;
+		}
+	}, [displayedContent]);
+
+	const progress = text.length > 0 ? (displayedContent.length / text.length) * 100 : 0;
+
+	return (
+		<div className="mt-1">
+			<ShimmerBar progress={progress} />
+			<div
+				ref={contentRef}
+				className="mt-1 max-h-20 overflow-y-auto text-[10px] leading-relaxed text-[var(--vscode-editor-foreground)] opacity-70"
+			>
+				{displayedContent}
+				{displayedContent.length < text.length && (
+					<span className="inline-block h-3 w-1 animate-pulse bg-purple-400" />
+				)}
+			</div>
+		</div>
+	);
+}
+
+// ============================================================================
+// Thinking Block Component - Lightweight Style
+// ============================================================================
 
 export function ThinkingBlock({
 	preview,
@@ -43,40 +118,68 @@ export function ThinkingBlock({
 
 	return (
 		<div className="my-0.5">
+			{/* Header Row */}
 			<button
 				type="button"
 				onClick={onToggle}
-				className="flex items-center gap-1.5 py-0.5 text-[11px] text-muted-foreground/50 transition-colors duration-150 hover:text-muted-foreground/70 select-none"
+				className="flex w-full items-center gap-1.5 py-0.5 text-left transition-colors duration-150 hover:text-[var(--vscode-editor-foreground)]"
 			>
 				{isStreaming ? (
-					<span className="inline-block h-3 w-3 flex-shrink-0 animate-spin rounded-full border-2 border-[var(--vscode-progressBar-background,#4f8cff)]/30 border-t-[var(--vscode-progressBar-background,#4f8cff)]" />
+					<Lightbulb className="h-3 w-3 flex-shrink-0 text-purple-400" />
 				) : (
 					<ChevronDown
-						className={`h-3 w-3 flex-shrink-0 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+						className={cn(
+							"h-3 w-3 flex-shrink-0 transition-transform duration-200",
+							expanded ? "rotate-180" : "",
+							"text-[var(--vscode-editor-foreground)] opacity-40",
+						)}
 					/>
 				)}
-				<span>{statusLabel}</span>
-				{heading ? (
-					<>
-						<span className="text-muted-foreground/20">·</span>
-						<span className="max-w-[200px] truncate">{heading}</span>
-					</>
-				) : preview ? (
-					<>
-						<span className="text-muted-foreground/20">·</span>
-						<span className="max-w-[200px] truncate">{preview}</span>
-					</>
-				) : null}
-			</button>
-			<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${expanded ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"}`}
-			>
-				<div
-					ref={scrollRef}
-					className="mt-1 max-h-[200px] overflow-y-auto border-l border-muted-foreground/10 pl-4 text-[11px] leading-relaxed text-muted-foreground/60"
+
+				<span
+					className={cn(
+						"text-[11px]",
+						isStreaming ? "text-purple-400" : "text-[var(--vscode-editor-foreground)] opacity-50",
+					)}
 				>
-					<MarkdownMessage content={text} />
-				</div>
+					{statusLabel}
+				</span>
+
+				{(heading || preview) && (
+					<>
+						<span className="text-[var(--vscode-editor-foreground)] opacity-20">·</span>
+						<span className="max-w-[180px] truncate text-[11px] text-[var(--vscode-editor-foreground)] opacity-40">
+							{heading || preview}
+						</span>
+					</>
+				)}
+
+				{isStreaming && (
+					<span className="ml-1 flex gap-0.5">
+						<span className="h-1 w-1 animate-pulse rounded-full bg-purple-400" />
+						<span className="h-1 w-1 animate-pulse rounded-full bg-purple-400 [animation-delay:150ms]" />
+						<span className="h-1 w-1 animate-pulse rounded-full bg-purple-400 [animation-delay:300ms]" />
+					</span>
+				)}
+			</button>
+
+			{/* Content */}
+			<div
+				className={cn(
+					"overflow-hidden transition-all duration-200 ease-in-out",
+					expanded || isStreaming ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0",
+				)}
+			>
+				{isStreaming ? (
+					<StreamingContent text={text} />
+				) : (
+					<div
+						ref={scrollRef}
+						className="mt-1 max-h-[200px] overflow-y-auto border-l border-[var(--vscode-widget-border)] pl-3 text-[11px] leading-relaxed text-[var(--vscode-editor-foreground)] opacity-70"
+					>
+						<MarkdownMessage content={text} />
+					</div>
+				)}
 			</div>
 		</div>
 	);

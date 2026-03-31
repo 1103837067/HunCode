@@ -22,7 +22,8 @@ export type WebviewInboundMessage =
 	| { type: "ui.addCurrentFileContext" }
 	| { type: "ui.addSelectionContext" }
 	| { type: "ui.previewImage"; image: { mimeType: string; data: string } }
-	| { type: "ui.setDisplayLanguage"; language: "auto" | "zh-CN" | "en" };
+	| { type: "ui.setDisplayLanguage"; language: "auto" | "zh-CN" | "en" }
+	| { type: "ui.openFile"; path: string; selection?: { startLine: number; endLine?: number } };
 
 const vscodeApi = (globalThis as unknown as Window).acquireVsCodeApi?.();
 

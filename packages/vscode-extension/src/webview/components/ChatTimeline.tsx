@@ -8,18 +8,12 @@ import { UserMessageCard } from "./UserMessageCard.js";
 import { buildRenderRows } from "./chat-timeline-model.js";
 
 function AssistantFlowShell({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="relative flex flex-col items-start">
-			<div className="flex w-full max-w-full min-w-0 flex-col overflow-hidden rounded-lg border border-border/30 bg-card/30">
-				<div className="flex w-full max-w-full min-w-0 flex-col gap-3 overflow-hidden p-2">{children}</div>
-			</div>
-		</div>
-	);
+	return <div className="flex w-full max-w-full min-w-0 flex-col px-3">{children}</div>;
 }
 
 function AssistantLoadingIndicator() {
 	return (
-		<div className="pl-2">
+		<div>
 			<div className="inline-block h-3 w-3 rounded-full border-2 border-foreground/20 border-t-foreground animate-spin" />
 		</div>
 	);
@@ -87,12 +81,10 @@ function AssistantFlowGroup({
 	if (visibleParts.length === 0 && !showBottomLoading) return null;
 
 	return (
-		<div className="px-3 py-1.5">
-			<AssistantFlowShell>
-				{visibleParts}
-				{showBottomLoading ? <AssistantLoadingIndicator /> : null}
-			</AssistantFlowShell>
-		</div>
+		<AssistantFlowShell>
+			{visibleParts}
+			{showBottomLoading ? <AssistantLoadingIndicator /> : null}
+		</AssistantFlowShell>
 	);
 }
 
@@ -106,9 +98,9 @@ export function ChatTimeline({
 	const rows = React.useMemo(() => buildRenderRows(timeline), [timeline]);
 
 	return (
-		<div className="space-y-3">
+		<div className="pb-2">
 			{rows.map((row) => {
-				if (row.kind === "user") return <UserMessageCard key={row.key} item={row.item} />;
+				if (row.kind === "user") return <div key={row.key} className="pb-2"><UserMessageCard item={row.item} /></div>;
 				if (row.kind === "system") return <SystemMessage key={row.key} item={row.item} />;
 				if (row.kind === "tool") return <ToolStepCard key={row.key} item={row.item} onToggle={onToggleTool} compact />;
 				return <AssistantFlowGroup key={row.key} assistant={row.assistant} onToggleTool={onToggleTool} />;

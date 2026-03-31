@@ -33,7 +33,7 @@ export class ProcessManager implements vscode.Disposable {
 		const cliPath = findCliPath();
 		const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 		this.log(`Starting pi --mode rpc: ${cliPath} (cwd=${cwd ?? "<none>"})`);
-		const child = spawn(process.execPath, [cliPath, "--mode", "rpc"], {
+		const child = spawn(process.execPath, [cliPath, "--mode", "rpc", "--continue"], {
 			cwd,
 			stdio: ["pipe", "pipe", "pipe"],
 		});

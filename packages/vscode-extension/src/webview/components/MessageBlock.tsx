@@ -88,7 +88,11 @@ function UserMessageCard({ item }: { item: TimelineUserItem }) {
 				/>
 			) : (
 				<PromptCollapsedCard
-					content={<MarkdownMessage content={item.text} />}
+					content={
+						<div className="max-h-[180px] overflow-y-auto">
+							<MarkdownMessage content={item.text} />
+						</div>
+					}
 					contextPills={item.context}
 					onClick={() => setExpanded(true)}
 				/>

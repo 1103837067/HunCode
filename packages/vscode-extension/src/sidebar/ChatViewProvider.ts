@@ -323,6 +323,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
 		if (event.type === "ui.error" && typeof event.message === "string") {
 			this.processManager.log(`[webview:error] ${event.message}`);
+			return;
+		}
+
+		if (event.type === "ui.openFile" && typeof event.path === "string") {
+			const selection = event.selection as { startLine?: number; endLine?: number } | undefined;
+			const range =
+				selection?.startLine !== undefined
+					? new vscode.Range(
+							new vscode.Position(selection.startLine - 1, 0),
+							new vscode.Position((selection.endLine ?? selection.startLine) - 1, Number.MAX_SAFE_INTEGER),
+						)
+					: undefined;
+			void vscode.workspace.openTextDocument(event.path).then((doc) => {
+				void vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, selection: range });
+			});
+			return;
 		}
 	}
 

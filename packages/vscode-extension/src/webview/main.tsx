@@ -36,11 +36,9 @@ if (!container) {
 try {
 	const root = createRoot(container as Element);
 	root.render(
-		<React.StrictMode>
-			<AppErrorBoundary>
-				<App />
-			</AppErrorBoundary>
-		</React.StrictMode>,
+		<AppErrorBoundary>
+			<App />
+		</AppErrorBoundary>,
 	);
 	log("after root.render");
 } catch (error) {

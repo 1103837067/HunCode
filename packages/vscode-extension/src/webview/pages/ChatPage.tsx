@@ -1,3 +1,4 @@
+import * as React from "react";
 import { ScrollArea } from "../ui/scroll-area.js";
 import type { WebviewState } from "../lib/state.js";
 import { ChatTimeline } from "../components/ChatTimeline.js";
@@ -5,6 +6,7 @@ import { ReactComposer } from "../components/ReactComposer.js";
 
 export function ChatPage({
 	state,
+	viewportRef,
 	onToggleTool,
 	onRemoveContext,
 	onAddCurrentFile,
@@ -16,6 +18,7 @@ export function ChatPage({
 	onSubmit,
 }: {
 	state: WebviewState;
+	viewportRef?: React.Ref<any>;
 	onToggleTool: (toolCallId: string) => void;
 	onRemoveContext: (pill: WebviewState["contextPills"][number]) => void;
 	onAddCurrentFile: () => void;
@@ -30,7 +33,7 @@ export function ChatPage({
 
 	return (
 		<>
-			<ScrollArea className="flex-1">
+			<ScrollArea ref={viewportRef} className="flex-1">
 				<div className="flex min-h-full flex-col px-3 pt-3 pb-0">
 					{hasTimeline ? <ChatTimeline timeline={state.timeline} onToggleTool={onToggleTool} /> : <div className="flex-1" />}
 				</div>

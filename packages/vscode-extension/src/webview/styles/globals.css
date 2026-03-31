@@ -205,11 +205,16 @@
 	.pi-code-block .token.comment,
 	.pi-code-block .token.prolog,
 	.pi-code-block .token.doctype,
-	.pi-code-block .token.cdata {
+	.pi-code-block .token.cdata,
+	.tool-step-card .token.comment,
+	.tool-step-card .token.prolog,
+	.tool-step-card .token.doctype,
+	.tool-step-card .token.cdata {
 		color: var(--vscode-editorGhostText-foreground, #6a737d);
 	}
 
-	.pi-code-block .token.punctuation {
+	.pi-code-block .token.punctuation,
+	.tool-step-card .token.punctuation {
 		color: var(--vscode-editor-foreground, var(--foreground));
 	}
 
@@ -219,7 +224,14 @@
 	.pi-code-block .token.number,
 	.pi-code-block .token.constant,
 	.pi-code-block .token.symbol,
-	.pi-code-block .token.deleted {
+	.pi-code-block .token.deleted,
+	.tool-step-card .token.property,
+	.tool-step-card .token.tag,
+	.tool-step-card .token.boolean,
+	.tool-step-card .token.number,
+	.tool-step-card .token.constant,
+	.tool-step-card .token.symbol,
+	.tool-step-card .token.deleted {
 		color: var(--vscode-debugTokenExpression-number, #b5cea8);
 	}
 
@@ -228,7 +240,13 @@
 	.pi-code-block .token.string,
 	.pi-code-block .token.char,
 	.pi-code-block .token.builtin,
-	.pi-code-block .token.inserted {
+	.pi-code-block .token.inserted,
+	.tool-step-card .token.selector,
+	.tool-step-card .token.attr-name,
+	.tool-step-card .token.string,
+	.tool-step-card .token.char,
+	.tool-step-card .token.builtin,
+	.tool-step-card .token.inserted {
 		color: var(--vscode-debugTokenExpression-string, #ce9178);
 	}
 
@@ -236,24 +254,37 @@
 	.pi-code-block .token.entity,
 	.pi-code-block .token.url,
 	.pi-code-block .language-css .token.string,
-	.pi-code-block .style .token.string {
+	.pi-code-block .style .token.string,
+	.tool-step-card .token.operator,
+	.tool-step-card .token.entity,
+	.tool-step-card .token.url,
+	.tool-step-card .language-css .token.string,
+	.tool-step-card .style .token.string {
 		color: var(--vscode-symbolIcon-operatorForeground, #d4d4d4);
 	}
 
 	.pi-code-block .token.atrule,
 	.pi-code-block .token.attr-value,
-	.pi-code-block .token.keyword {
+	.pi-code-block .token.keyword,
+	.tool-step-card .token.atrule,
+	.tool-step-card .token.attr-value,
+	.tool-step-card .token.keyword {
 		color: var(--vscode-symbolIcon-keywordForeground, #c586c0);
 	}
 
 	.pi-code-block .token.function,
-	.pi-code-block .token.class-name {
+	.pi-code-block .token.class-name,
+	.tool-step-card .token.function,
+	.tool-step-card .token.class-name {
 		color: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
 	}
 
 	.pi-code-block .token.regex,
 	.pi-code-block .token.important,
-	.pi-code-block .token.variable {
+	.pi-code-block .token.variable,
+	.tool-step-card .token.regex,
+	.tool-step-card .token.important,
+	.tool-step-card .token.variable {
 		color: var(--vscode-symbolIcon-variableForeground, #9cdcfe);
 	}
 

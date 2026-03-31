@@ -32,6 +32,8 @@ export type ToolState = "running" | "success" | "error";
 export type ToolLike = {
 	id: string;
 	toolName: string;
+	/** Tool arguments (from tool_execution_start event) */
+	args?: Record<string, unknown>;
 	summary?: string;
 	output: string;
 	state: ToolState;
@@ -40,6 +42,8 @@ export type ToolLike = {
 	meta?: Record<string, unknown>;
 	startedAt?: number;
 	finishedAt?: number;
+	/** Tool-specific details from result (e.g., diff for edit tool) */
+	details?: Record<string, unknown>;
 };
 
 export type TimelineAssistantPart =

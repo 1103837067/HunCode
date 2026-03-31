@@ -16,31 +16,112 @@ function errorToHost(message: string): void {
 	postToHost({ type: "ui.error", message });
 }
 
-function createInitialAppState(): WebviewState {
-	const persisted = getPersistedState<WebviewState>();
-	return persisted ? { ...createInitialState(), ...persisted } : createInitialState();
+type AppTab = SessionTab & {
+	sessionId?: string;
+	draftState?: WebviewState;
+};
+
+type AppTabState = {
+	tabs: AppTab[];
+	activeTabId: string;
+};
+
+function toDraftSnapshot(state: WebviewState): WebviewState {
+	return {
+		...state,
+		timeline: [...state.timeline],
+		contextPills: [...state.contextPills],
+		availableModels: [...state.availableModels],
+		activeToolCallIds: [...state.activeToolCallIds],
+		providerConfigs: { ...state.providerConfigs },
+	};
 }
 
-function getInitialTabs(): { tabs: SessionTab[]; activeTabId: string } {
+function normalizeDraftState(value: unknown): WebviewState | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	return { ...createInitialState(), ...(value as Partial<WebviewState>) };
+}
+
+function normalizePersistedTab(value: unknown): AppTab | undefined {
+	if (!value || typeof value !== "object") return undefined;
+	const candidate = value as Record<string, unknown>;
+	if (typeof candidate.id !== "string" || typeof candidate.label !== "string") return undefined;
+	if (candidate.kind !== "draft" && candidate.kind !== "session") return undefined;
+	return {
+		id: candidate.id,
+		label: candidate.label,
+		kind: candidate.kind,
+		sessionPath: typeof candidate.sessionPath === "string" ? candidate.sessionPath : undefined,
+		sessionId: typeof candidate.sessionId === "string" ? candidate.sessionId : undefined,
+		draftState: normalizeDraftState(candidate.draftState),
+	};
+}
+
+function buildAutoScrollKey(state: WebviewState): string {
+	const timelineKey = state.timeline
+		.map((item) => {
+			if (item.kind === "user") {
+				return `u:${item.id}:${item.text.length}`;
+			}
+			if (item.kind === "system") {
+				return `s:${item.id}:${item.text.length}:${item.level}`;
+			}
+			if (item.kind === "tool") {
+				return `t:${item.id}:${item.state}:${item.summary?.length ?? 0}:${item.output.length}`;
+			}
+			const partsKey = item.parts
+				.map((part) => {
+					if (part.kind === "thinking") return `h:${part.id}:${part.text.length}`;
+					if (part.kind === "text") return `x:${part.id}:${part.text.length}`;
+					return `t:${part.toolCallId}:${part.state}:${part.summary?.length ?? 0}:${part.output.length}`;
+				})
+				.join(",");
+			return `a:${item.id}:${item.streamState ?? "none"}:${Number(item.isStreaming)}:${item.text.length}:${partsKey}`;
+		})
+		.join("|");
+
+	return [state.status, state.sessionId ?? "", state.activeAssistantMessageId ?? "", ...state.activeToolCallIds, timelineKey].join("::");
+}
+
+function getInitialTabs(): AppTabState {
 	const persisted = getPersistedState<{ __tabs?: unknown; __activeTabId?: unknown } | undefined>();
 	const tabs = Array.isArray(persisted?.__tabs)
-		? persisted.__tabs.filter(
-				(item): item is SessionTab =>
-					typeof item === "object" &&
-					item !== null &&
-					"id" in item &&
-					"label" in item &&
-					"kind" in item,
-			)
+		? persisted.__tabs
+				.map(normalizePersistedTab)
+				.filter((item): item is AppTab => item !== undefined)
 		: [];
 	if (tabs.length > 0) {
 		const activeTabId = typeof persisted?.__activeTabId === "string" ? persisted.__activeTabId : tabs[0].id;
-		return { tabs, activeTabId };
+		const hasActiveTab = tabs.some((tab) => tab.id === activeTabId);
+		return { tabs, activeTabId: hasActiveTab ? activeTabId : tabs[0].id };
 	}
+	const initialDraft = { id: "draft-initial", label: "New chat", kind: "draft", draftState: createInitialState() } satisfies AppTab;
 	return {
-		tabs: [{ id: "draft-initial", label: "New chat", kind: "draft" }],
-		activeTabId: "draft-initial",
+		tabs: [initialDraft],
+		activeTabId: initialDraft.id,
 	};
+}
+
+// Initialize tabs and state together
+function getInitialAppSetup(): { tabs: AppTabState; state: WebviewState } {
+	const tabState = getInitialTabs();
+	const activeTab = tabState.tabs.find((tab) => tab.id === tabState.activeTabId);
+
+	// If active tab is a session, don't restore from cache - wait for backend data
+	if (activeTab?.kind === "session") {
+		logToHost(`Initial tab is session: ${activeTab.sessionPath}`);
+		return { tabs: tabState, state: createInitialState() };
+	}
+
+	// If active tab is a draft with draftState, use it as initial state
+	if (activeTab?.kind === "draft" && activeTab.draftState) {
+		logToHost(`Initial tab is draft with draftState, timeline: ${activeTab.draftState.timeline.length}`);
+		return { tabs: tabState, state: toDraftSnapshot(activeTab.draftState) };
+	}
+
+	// Otherwise, use empty initial state
+	logToHost(`Initial tab has no draftState`);
+	return { tabs: tabState, state: createInitialState() };
 }
 
 function LoadingScreen({ locale, summary }: { locale: AppLocale; summary: string }) {
@@ -62,13 +143,17 @@ function LoadingScreen({ locale, summary }: { locale: AppLocale; summary: string
 }
 
 export function App() {
-	const [state, setState] = React.useState<WebviewState>(createInitialAppState);
+	const initialSetup = React.useMemo(() => getInitialAppSetup(), []);
+	const [state, setState] = React.useState<WebviewState>(initialSetup.state);
 	const [locale, setLocale] = React.useState<AppLocale>("en");
 	const [displayLanguage, setDisplayLanguage] = React.useState<DisplayLanguageSetting>("auto");
-	const [tabState, setTabState] = React.useState(getInitialTabs);
+	const [tabState, setTabState] = React.useState<AppTabState>(initialSetup.tabs);
 	const [historyOpenSignal, setHistoryOpenSignal] = React.useState(0);
 	const [historyLoading, setHistoryLoading] = React.useState(false);
 	const [sessionHistory, setSessionHistory] = React.useState<SessionHistoryItem[]>([]);
+	const timelineViewportRef = React.useRef<any>(null);
+	const stateRef = React.useRef(state);
+	const tabStateRef = React.useRef(tabState);
 
 	const windowObject = globalThis as typeof globalThis & {
 		document?: {
@@ -81,30 +166,186 @@ export function App() {
 	};
 
 	React.useEffect(() => {
-		setPersistedState({ ...state, __tabs: tabState.tabs, __activeTabId: tabState.activeTabId });
+		stateRef.current = state;
+	}, [state]);
+
+	React.useEffect(() => {
+		tabStateRef.current = tabState;
+	}, [tabState]);
+
+	const scrollToBottom = React.useCallback(() => {
+		const viewport = timelineViewportRef.current as
+			| { scrollTop: number; scrollHeight: number; scrollTo?: (options: { top: number; behavior?: "auto" | "smooth" }) => void }
+			| null;
+		if (!viewport) return;
+		if (typeof viewport.scrollTo === "function") {
+			viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
+			return;
+		}
+		viewport.scrollTop = viewport.scrollHeight;
+	}, []);
+
+	const scheduleScrollToBottom = React.useCallback(() => {
+		setTimeout(() => scrollToBottom(), 0);
+	}, [scrollToBottom]);
+
+	const snapshotActiveTab = React.useCallback((tabs: AppTab[], activeTabId: string, currentState: WebviewState): AppTab[] => {
+		return tabs.map((tab) => {
+			if (tab.id !== activeTabId) return tab;
+			if (tab.kind === "draft") {
+				return { ...tab, draftState: toDraftSnapshot(currentState) };
+			}
+			return { ...tab, sessionId: currentState.sessionId ?? tab.sessionId };
+		});
+	}, []);
+
+	const restoreDraftTab = React.useCallback(
+		(tab: AppTab, fallbackState: WebviewState) => {
+			setState(tab.draftState ? toDraftSnapshot(tab.draftState) : reduceState(fallbackState, { type: "reset" }));
+			scheduleScrollToBottom();
+		},
+		[scheduleScrollToBottom],
+	);
+
+	const switchToSessionTab = React.useCallback(
+		(tab: AppTab, tabs: AppTab[], nextActiveTabId: string) => {
+			setTabState({ tabs, activeTabId: nextActiveTabId });
+			setState((current) => reduceState(current, { type: "reset" }));
+			if (tab.sessionPath) {
+				postToHost({ type: "ui.openSession", sessionPath: tab.sessionPath });
+			}
+			scheduleScrollToBottom();
+		},
+		[scheduleScrollToBottom],
+	);
+
+	const activateTab = React.useCallback(
+		(tabId: string) => {
+			const currentState = stateRef.current;
+			const currentTabState = tabStateRef.current;
+			if (tabId === currentTabState.activeTabId) {
+				scheduleScrollToBottom();
+				return;
+			}
+			const tabs = snapshotActiveTab(currentTabState.tabs, currentTabState.activeTabId, currentState);
+			const target = tabs.find((tab) => tab.id === tabId);
+			if (!target) return;
+			if (target.kind === "session") {
+				switchToSessionTab(target, tabs, tabId);
+				return;
+			}
+			setTabState({ tabs, activeTabId: tabId });
+			restoreDraftTab(target, currentState);
+		},
+		[restoreDraftTab, scheduleScrollToBottom, snapshotActiveTab, switchToSessionTab],
+	);
+
+	const createNewDraftTab = React.useCallback(() => {
+		const currentState = stateRef.current;
+		const currentTabState = tabStateRef.current;
+		const nextDraftState = reduceState(currentState, { type: "reset" });
+		const tabs = snapshotActiveTab(currentTabState.tabs, currentTabState.activeTabId, currentState);
+		const id = `draft-${Date.now()}`;
+		setTabState({
+			tabs: [...tabs, { id, label: "New chat", kind: "draft", draftState: nextDraftState } satisfies AppTab],
+			activeTabId: id,
+		});
+		setState(nextDraftState);
+		scheduleScrollToBottom();
+	}, [scheduleScrollToBottom, snapshotActiveTab]);
+
+	const openSessionInTab = React.useCallback(
+		(sessionPath: string) => {
+			const currentState = stateRef.current;
+			const currentTabState = tabStateRef.current;
+			const existingTab = currentTabState.tabs.find((tab) => tab.sessionPath === sessionPath);
+			if (existingTab) {
+				activateTab(existingTab.id);
+				return;
+			}
+			const tabs = snapshotActiveTab(currentTabState.tabs, currentTabState.activeTabId, currentState);
+			const match = sessionHistory.find((session) => session.path === sessionPath);
+			const label = match?.name || match?.preview?.slice(0, 30) || "Session";
+			const tabId = `session-${Date.now()}`;
+			switchToSessionTab({ id: tabId, label, kind: "session", sessionPath }, [...tabs, { id: tabId, label, kind: "session", sessionPath }], tabId);
+		},
+		[activateTab, sessionHistory, snapshotActiveTab, switchToSessionTab],
+	);
+
+	const closeTab = React.useCallback(
+		(tabId: string) => {
+			const currentState = stateRef.current;
+			const currentTabState = tabStateRef.current;
+			const index = currentTabState.tabs.findIndex((tab) => tab.id === tabId);
+			if (index === -1) return;
+			const tabsWithSnapshot = snapshotActiveTab(currentTabState.tabs, currentTabState.activeTabId, currentState);
+			const nextTabs = tabsWithSnapshot.filter((tab) => tab.id !== tabId);
+			if (nextTabs.length === 0) {
+				const nextDraftState = reduceState(currentState, { type: "reset" });
+				const fallbackTab = { id: "draft-fallback", label: "New chat", kind: "draft", draftState: nextDraftState } satisfies AppTab;
+				setTabState({ tabs: [fallbackTab], activeTabId: fallbackTab.id });
+				setState(nextDraftState);
+				scheduleScrollToBottom();
+				return;
+			}
+			if (currentTabState.activeTabId !== tabId) {
+				setTabState({ tabs: nextTabs, activeTabId: currentTabState.activeTabId });
+				return;
+			}
+			const fallbackTab = nextTabs[Math.min(index, nextTabs.length - 1)] ?? nextTabs[nextTabs.length - 1];
+			if (!fallbackTab) return;
+			if (fallbackTab.kind === "session") {
+				switchToSessionTab(fallbackTab, nextTabs, fallbackTab.id);
+				return;
+			}
+			setTabState({ tabs: nextTabs, activeTabId: fallbackTab.id });
+			restoreDraftTab(fallbackTab, currentState);
+		},
+		[restoreDraftTab, scheduleScrollToBottom, snapshotActiveTab, switchToSessionTab],
+	);
+
+	React.useEffect(() => {
+		// Persist tabs including draftState for draft tabs
+		const persistedTabs = tabState.tabs.map((tab) => {
+			if (tab.kind === "draft" && tab.draftState) {
+				return { ...tab, draftState: toDraftSnapshot(tab.draftState) };
+			}
+			return tab;
+		});
+		setPersistedState({ ...state, __tabs: persistedTabs, __activeTabId: tabState.activeTabId });
 	}, [state, tabState]);
 
 	React.useEffect(() => {
 		setTabState((current) => {
-			const activeTab = current.tabs.find((t) => t.id === current.activeTabId);
+			const activeTab = current.tabs.find((tab) => tab.id === current.activeTabId);
 			if (activeTab?.kind !== "draft") return current;
 			if (!state.sessionId && state.timeline.length === 0) return current;
 			const firstUser = state.timeline.find((item) => item.kind === "user");
 			const userText = firstUser?.kind === "user" ? firstUser.text : undefined;
-			const label = userText
-				? userText.slice(0, 30) + (userText.length > 30 ? "..." : "")
-				: "New chat";
+			const label = userText ? userText.slice(0, 30) + (userText.length > 30 ? "..." : "") : "New chat";
 			if (label === activeTab.label && !state.sessionId) return current;
 			return {
 				...current,
-				tabs: current.tabs.map((t) =>
-					t.id === current.activeTabId
-						? { ...t, label, kind: state.sessionId ? ("session" as const) : t.kind }
-						: t,
+				tabs: current.tabs.map((tab) =>
+					tab.id === current.activeTabId
+						? { ...tab, label, kind: state.sessionId ? ("session" as const) : tab.kind }
+						: tab,
 				),
 			};
 		});
 	}, [state.sessionId, state.timeline]);
+
+	const autoScrollKey = React.useMemo(() => buildAutoScrollKey(state), [state]);
+
+	React.useLayoutEffect(() => {
+		scrollToBottom();
+	}, [scrollToBottom, autoScrollKey, tabState.activeTabId]);
+
+	const [initialSessionPath] = React.useState(() => {
+		const activeTab = initialSetup.tabs.tabs.find((tab) => tab.id === initialSetup.tabs.activeTabId);
+		return activeTab?.kind === "session" ? activeTab.sessionPath : undefined;
+	});
+	const hasSwitchedSession = React.useRef(false);
 
 	React.useEffect(() => {
 		logToHost("App mounted");
@@ -139,12 +380,12 @@ export function App() {
 				return;
 			}
 			if (data.type === "ui.sessionHistory" && Array.isArray(data.sessions)) {
-				const items = (data.sessions as Array<Record<string, unknown>>).map((s) => ({
-					id: String(s.id ?? ""),
-					path: String(s.path ?? ""),
-					name: s.name ? String(s.name) : undefined,
-					preview: String(s.firstMessage ?? ""),
-					modifiedAt: String(s.modified ?? ""),
+				const items = (data.sessions as Array<Record<string, unknown>>).map((session) => ({
+					id: String(session.id ?? ""),
+					path: String(session.path ?? ""),
+					name: session.name ? String(session.name) : undefined,
+					preview: String(session.firstMessage ?? ""),
+					modifiedAt: String(session.modified ?? ""),
 				}));
 				setSessionHistory(items);
 				setHistoryLoading(false);
@@ -172,21 +413,29 @@ export function App() {
 				setState((current) => reduceState(current, { type: "setInitialState", state: rpcState }));
 				const sessionName = typeof rpcState.sessionName === "string" ? rpcState.sessionName : undefined;
 				const sessionId = typeof rpcState.sessionId === "string" ? rpcState.sessionId : undefined;
-				if (sessionId) {
-					setTabState((current) => {
-						const activeTab = current.tabs.find((t) => t.id === current.activeTabId);
-						if (activeTab?.kind === "draft") {
+				const sessionPath = typeof rpcState.sessionFile === "string" ? rpcState.sessionFile : undefined;
+				if (sessionId || sessionPath || sessionName) {
+					setTabState((current) => ({
+						...current,
+						tabs: current.tabs.map((tab) => {
+							if (tab.id !== current.activeTabId) return tab;
 							return {
-								...current,
-								tabs: current.tabs.map((t) =>
-									t.id === current.activeTabId
-										? { ...t, kind: "session" as const, label: sessionName || t.label }
-										: t,
-								),
+								...tab,
+								kind: "session",
+								label: sessionName || tab.label,
+								sessionId: sessionId ?? tab.sessionId,
+								sessionPath: sessionPath ?? tab.sessionPath,
+								draftState: undefined,
 							};
-						}
-						return current;
-					});
+						}),
+					}));
+				}
+
+				// Check if we need to switch to a different session (only once on initial load)
+				if (!hasSwitchedSession.current && initialSessionPath && initialSessionPath !== sessionPath) {
+					logToHost(`Need to switch session: ${initialSessionPath} (current: ${sessionPath})`);
+					postToHost({ type: "ui.openSession", sessionPath: initialSessionPath });
+					hasSwitchedSession.current = true;
 				}
 				return;
 			}
@@ -199,7 +448,13 @@ export function App() {
 			if (data.type === "rpc:messages") {
 				logToHost("rpc:messages received");
 				const messagesData = data.data as { messages: Array<Record<string, unknown>> };
-				setState((current) => reduceState(current, { type: "loadMessages", messages: messagesData.messages }));
+				logToHost(`rpc:messages count: ${messagesData.messages.length}`);
+				setState((current) => {
+					const next = reduceState(current, { type: "loadMessages", messages: messagesData.messages });
+					logToHost(`after loadMessages timeline length: ${next.timeline.length}`);
+					return next;
+				});
+				scheduleScrollToBottom();
 				return;
 			}
 
@@ -214,21 +469,14 @@ export function App() {
 		return () => {
 			if (removeMessageListener) removeMessageListener("message", onMessage);
 		};
-	}, []);
+	}, [createNewDraftTab, scheduleScrollToBottom]);
 
 	const postMessage = (message: unknown) => postToHost(message);
 	const isWaitingForBackend = !state.sessionId && state.backendState === "starting";
-
-	const createNewDraftTab = () => {
-		const id = `draft-${Date.now()}`;
-		setTabState((current) => ({
-			tabs: [...current.tabs, { id, label: "New chat", kind: "draft" } satisfies SessionTab],
-			activeTabId: id,
-		}));
-		setState((current) => reduceState(current, { type: "reset" }));
-	};
-
 	const rootStyle = { "--pi-chat-font-size": `${state.chatFontSize}px` } as React.CSSProperties;
+	const visibleTabs = React.useMemo(() => tabState.tabs.map(({ draftState, sessionId, ...tab }) => tab), [tabState.tabs]);
+
+	void displayLanguage;
 
 	return (
 		<div className="flex h-full flex-col bg-background text-foreground" style={rootStyle}>
@@ -239,40 +487,24 @@ export function App() {
 					<HeaderBar
 						locale={locale}
 						sessionHistory={sessionHistory}
-						tabs={tabState.tabs}
+						tabs={visibleTabs}
 						activeTabId={tabState.activeTabId}
 						historyLoading={historyLoading}
 						historyOpenSignal={historyOpenSignal}
-						onSelectTab={(tabId) => {
-							setTabState((current) => ({ ...current, activeTabId: tabId }));
-						}}
-						onCloseTab={(tabId) => {
-							setTabState((current) => {
-								const index = current.tabs.findIndex((tab) => tab.id === tabId);
-								const nextTabs = current.tabs.filter((tab) => tab.id !== tabId);
-								const fallback = nextTabs[Math.min(index, nextTabs.length - 1)] ?? { id: "draft-fallback", label: "New chat", kind: "draft" as const };
-								return { tabs: nextTabs.length > 0 ? nextTabs : [fallback], activeTabId: fallback.id };
-							});
-						}}
+						onSelectTab={activateTab}
+						onCloseTab={closeTab}
 						onRefreshSessions={() => {
 							setHistoryLoading(true);
 							postToHost({ type: "ui.refreshSessions" });
 						}}
 						onLog={(message) => logToHost(message)}
 						onOpenSession={(sessionPath) => {
-							const match = sessionHistory.find((s) => s.path === sessionPath);
-							const label = match?.name || match?.preview?.slice(0, 30) || "Session";
-							const tabId = `session-${Date.now()}`;
-							setTabState((current) => ({
-								tabs: [...current.tabs, { id: tabId, label, kind: "session", sessionPath }],
-								activeTabId: tabId,
-							}));
-							setState((current) => reduceState(current, { type: "reset" }));
-							postToHost({ type: "ui.openSession", sessionPath });
+							openSessionInTab(sessionPath);
 						}}
 					/>
 					<ChatPage
 						state={state}
+						viewportRef={timelineViewportRef}
 						onToggleTool={(toolCallId) => setState((current) => reduceState(current, { type: "toggleToolExpanded", toolCallId }))}
 						onRemoveContext={(pill) =>
 							setState((current) =>
@@ -291,17 +523,17 @@ export function App() {
 						onRefreshModels={() => postMessage({ type: "ui.refreshModels" })}
 						onStop={() => postMessage({ type: "abort" })}
 						onDraftChange={(draft) => setState((current) => reduceState(current, { type: "setDraft", draft }))}
-					onSubmit={(text) => {
-						setState((current) =>
-							reduceState(current, {
-								type: "appendUserPrompt",
-								id: `user-${Date.now()}`,
-								text,
-								context: mapHostContextToPills(derivePromptContext(current)),
-							}),
-						);
-						postMessage({ type: "prompt", text });
-					}}
+						onSubmit={(text) => {
+							setState((current) =>
+								reduceState(current, {
+									type: "appendUserPrompt",
+									id: `user-${Date.now()}`,
+									text,
+									context: mapHostContextToPills(derivePromptContext(current)),
+								}),
+							);
+							postMessage({ type: "prompt", text });
+						}}
 					/>
 				</>
 			)}

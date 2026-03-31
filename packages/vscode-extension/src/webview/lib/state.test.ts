@@ -35,12 +35,18 @@ describe("reduceAgentEvent", () => {
 		state = reduceAgentEvent(state, { type: "message_start", message: { id: "msg-1", role: "assistant" } });
 		state = reduceAgentEvent(state, {
 			type: "message_update",
-			message: { id: "msg-1" },
+			message: {
+				id: "msg-1",
+				content: [{ type: "text", text: "Hello " }],
+			},
 			assistantMessageEvent: { type: "text_delta", delta: "Hello " },
 		});
 		state = reduceAgentEvent(state, {
 			type: "message_update",
-			message: { id: "msg-1" },
+			message: {
+				id: "msg-1",
+				content: [{ type: "text", text: "Hello world" }],
+			},
 			assistantMessageEvent: { type: "text_delta", delta: "world" },
 		});
 		if (state.timeline[0]?.kind !== "assistant") throw new Error("expected assistant");
@@ -52,11 +58,35 @@ describe("reduceAgentEvent", () => {
 		state = reduceAgentEvent(state, { type: "message_start", message: { id: "msg-1", role: "assistant" } });
 		state = reduceAgentEvent(state, {
 			type: "message_update",
-			message: { id: "msg-1" },
+			message: {
+				id: "msg-1",
+				content: [{ type: "thinking", thinking: "Thinking..." }],
+			},
 			assistantMessageEvent: { type: "thinking_delta", delta: "Thinking..." },
 		});
 		if (state.timeline[0]?.kind !== "assistant") throw new Error("expected assistant");
 		expect(state.timeline[0].thinkingText).toBe("Thinking...");
+	});
+
+	it("message_update creates a missing assistant entry when start was not received", () => {
+		let state = reduceAgentEvent(createInitialState(), { type: "agent_start" });
+		state = reduceAgentEvent(state, {
+			type: "message_update",
+			message: {
+				id: "msg-1",
+				content: [{ type: "text", text: "Recovered output" }],
+			},
+			assistantMessageEvent: { type: "text_delta", delta: "Recovered output" },
+		});
+		expect(state.activeAssistantMessageId).toBe("msg-1");
+		expect(state.timeline).toHaveLength(1);
+		if (state.timeline[0]?.kind !== "assistant") throw new Error("expected assistant");
+		expect(state.timeline[0]).toMatchObject({
+			id: "msg-1",
+			text: "Recovered output",
+			isStreaming: true,
+			streamState: "responding",
+		});
 	});
 
 	it("message_end finalizes the assistant message", () => {
@@ -74,6 +104,13 @@ describe("reduceAgentEvent", () => {
 		state = reduceAgentEvent(state, { type: "tool_execution_start", toolCallId: "tc-1", toolName: "read" });
 		expect(state.status).toBe("running-tools");
 		expect(state.activeToolCallIds).toContain("tc-1");
+	});
+
+	it("tool_execution_start does not duplicate active tool ids", () => {
+		let state = reduceAgentEvent(createInitialState(), { type: "agent_start" });
+		state = reduceAgentEvent(state, { type: "tool_execution_start", toolCallId: "tc-1", toolName: "read" });
+		state = reduceAgentEvent(state, { type: "tool_execution_start", toolCallId: "tc-1", toolName: "read" });
+		expect(state.activeToolCallIds).toEqual(["tc-1"]);
 	});
 
 	it("tool_execution_end marks tool as success/error", () => {

@@ -1,32 +1,69 @@
 #!/bin/sh
 
-# Get list of staged files before running check
+# Get list of staged files before running checks
 STAGED_FILES=$(git diff --cached --name-only)
 
-# Run the check script (formatting, linting, and type checking)
-echo "Running formatting, linting, and type checking..."
-npm run check
-if [ $? -ne 0 ]; then
-  echo "❌ Checks failed. Please fix the errors before committing."
-  exit 1
-fi
-
+RUN_ROOT_CHECK=0
+RUN_WEB_UI_CHECK=0
+RUN_VSCODE_CHECK=0
 RUN_BROWSER_SMOKE=0
+
 for file in $STAGED_FILES; do
   case "$file" in
-    packages/ai/*|packages/web-ui/*|package.json|package-lock.json)
+    packages/web-ui/*)
+      RUN_WEB_UI_CHECK=1
       RUN_BROWSER_SMOKE=1
-      break
+      ;;
+    packages/ai/*|package.json|package-lock.json)
+      RUN_WEB_UI_CHECK=1
+      RUN_BROWSER_SMOKE=1
+      ;;
+    packages/vscode-extension/*)
+      RUN_VSCODE_CHECK=1
+      ;;
+    .husky/pre-commit)
+      ;;
+    *)
+      RUN_ROOT_CHECK=1
       ;;
   esac
 done
 
-if [ $RUN_BROWSER_SMOKE -eq 1 ]; then
-  echo "Running browser smoke check..."
-  npm run check:browser-smoke
+if [ $RUN_ROOT_CHECK -eq 1 ]; then
+  echo "Running full repository checks..."
+  npm run check
   if [ $? -ne 0 ]; then
-    echo "❌ Browser smoke check failed."
+    echo "❌ Checks failed. Please fix the errors before committing."
     exit 1
+  fi
+else
+  if [ $RUN_WEB_UI_CHECK -eq 1 ]; then
+    echo "Running web-ui checks..."
+    cd packages/web-ui && npm run check
+    if [ $? -ne 0 ]; then
+      echo "❌ web-ui checks failed."
+      exit 1
+    fi
+    cd ../..
+  fi
+
+  if [ $RUN_VSCODE_CHECK -eq 1 ]; then
+    echo "Running vscode-extension checks..."
+    cd packages/vscode-extension && npm run check
+    if [ $? -ne 0 ]; then
+      echo "❌ vscode-extension checks failed."
+      exit 1
+    fi
+    cd ../..
+  fi
+
+  if [ $RUN_BROWSER_SMOKE -eq 1 ]; then
+    echo "Running browser smoke check..."
+    npm run check:browser-smoke
+    if [ $? -ne 0 ]; then
+      echo "❌ Browser smoke check failed."
+      exit 1
+    fi
   fi
 fi
 

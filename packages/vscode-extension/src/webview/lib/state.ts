@@ -242,6 +242,29 @@ function updateAssistant(
 	};
 }
 
+function ensureAssistantItem(state: WebviewState, assistantMessageId: string): WebviewState {
+	const exists = state.timeline.some((item) => item.kind === "assistant" && item.id === assistantMessageId);
+	if (exists) return state;
+	return {
+		...state,
+		timeline: [
+			...state.timeline,
+			{
+				kind: "assistant",
+				id: assistantMessageId,
+				text: "",
+				parts: [],
+				thinkingText: "",
+				resultText: "",
+				toolCallIds: [],
+				lastToolCallId: undefined,
+				isStreaming: true,
+				streamState: "thinking",
+			},
+		],
+	};
+}
+
 /**
  * Sync an assistant item's parts from the full message content snapshot.
  * This mirrors web-ui's approach: use the structured content array directly
@@ -315,7 +338,12 @@ function syncPartsFromSnapshot(
 	};
 }
 
-function appendToolPart(item: TimelineAssistantItem, toolCallId: string, toolName: string, args?: Record<string, unknown>): TimelineAssistantItem {
+function appendToolPart(
+	item: TimelineAssistantItem,
+	toolCallId: string,
+	toolName: string,
+	args?: Record<string, unknown>,
+): TimelineAssistantItem {
 	const existingIndex = item.parts.findIndex((part) => part.kind === "tool" && part.toolCallId === toolCallId);
 	if (existingIndex >= 0) {
 		// Update existing tool part with complete args from tool_execution_start
@@ -470,6 +498,7 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 			const streamState: TimelineAssistantItem["streamState"] = isThinking ? "thinking" : "responding";
 
 			let nextState: WebviewState = { ...state, activeAssistantMessageId: messageId };
+			nextState = ensureAssistantItem(nextState, messageId);
 			if (isThinking) {
 				nextState = { ...nextState, activeThinkingMessageId: messageId };
 			} else if (ame.type === "thinking_end") {
@@ -518,10 +547,13 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 			const toolName = event.toolName as string;
 			const args = event.args as Record<string, unknown> | undefined;
 			const assistantMessageId = state.activeAssistantMessageId;
+			const activeToolCallIds = state.activeToolCallIds.includes(toolCallId)
+				? state.activeToolCallIds
+				: [...state.activeToolCallIds, toolCallId];
 			const baseState: WebviewState = {
 				...state,
 				status: "running-tools",
-				activeToolCallIds: [...state.activeToolCallIds, toolCallId],
+				activeToolCallIds,
 			};
 			if (!assistantMessageId) {
 				return {
@@ -557,7 +589,11 @@ export function reduceAgentEvent(state: WebviewState, event: Record<string, unkn
 				...state,
 				timeline: state.timeline.map((item) => {
 					if (item.kind === "tool" && item.id === toolCallId) {
-						return { ...item, args: args ?? item.args, output: streamOutput || item.output } satisfies TimelineToolItem;
+						return {
+							...item,
+							args: args ?? item.args,
+							output: streamOutput || item.output,
+						} satisfies TimelineToolItem;
 					}
 					if (item.kind === "assistant") {
 						return updateToolPart(item, toolCallId, (part) => ({
